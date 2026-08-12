@@ -1933,8 +1933,9 @@ async function pushCall(t){
 
   if(error){
     console.error("Supabase call history insert failed:", error);
+    // The live display still reads the current call directly from tickets,
+    // so a history-write failure does not prevent the current ticket appearing.
   }
-
 
 }
 
@@ -2002,9 +2003,8 @@ async function renderDisplay(){
   const latestBox=document.getElementById("latestCall");
   const historyBox=document.getElementById("callHistory");
 
-  if(!displayConfigs.length){
-    await loadHallsAndDisplays();
-  }
+  // Always refresh the centrally managed screen configuration.
+  await loadHallsAndDisplays();
 
   const cfg=displayConfigs.find(x=>x.slug===activeDisplaySlug && x.active) || null;
 
