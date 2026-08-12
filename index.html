@@ -187,54 +187,22 @@
           <div id="superuserQuickAccess" class="hidden" style="margin-bottom:14px">
             <button class="btn primary" onclick="showView('admin')">مدير النظام</button>
           </div>
-          <p class="muted">حدد نطاق عمل الكاونتر بشكل هرمي. يمكن تعديل الإعدادات في أي وقت.</p>
 
-          <div class="field">
-            <label>الإدارة</label>
-            <select id="routeDept" onchange="renderRouteHierarchy()">
-              <option value="">اختر الإدارة</option>
-              <option value="registration">إدارة التسجيل</option>
-              <option value="records">إدارة السجلات</option>
-              <option value="admissions">إدارة القبول</option>
-              <option value="graduates">إدارة الخريجين</option>
-            </select>
+          <p class="muted">اختر قائمة الانتظار التي سيخدمها هذا الكاونتر من الصلاحيات التي حددها مدير النظام.</p>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:12px 0 10px">
+            <h4 style="margin:0">قوائم الانتظار المتاحة</h4>
+            <label style="font-size:13px">
+              <input type="checkbox" id="selectAllAuthorizedQueues" onchange="toggleAllAuthorizedQueues(this.checked)">
+              تحديد جميع القوائم
+            </label>
           </div>
 
-          <div id="routeSectionWrap" class="field hidden">
-            <label>القسم</label>
-            <select id="routeSection" onchange="renderRouteHierarchy()">
-              <option value="">اختر القسم</option>
-              <option value="reception">قسم الاستقبال</option>
-              <option value="activity">قسم نشاط الخريج</option>
-              <option value="graduation">قسم شؤون التخرج</option>
-            </select>
-          </div>
-
-          <div id="routeServicesWrap" class="hidden">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0 10px">
-              <h4 style="margin:0">الخدمات</h4>
-              <label style="font-size:13px"><input type="checkbox" id="selectAllServices" onchange="toggleAllRouteServices(this.checked)"> تحديد جميع الخدمات</label>
-            </div>
-            <div id="routeServices" class="checklist"></div>
-          </div>
-
-          <div id="routeCollegesWrap" class="hidden" style="margin-top:16px">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0 10px">
-              <h4 style="margin:0">الكليات</h4>
-              <label style="font-size:13px"><input type="checkbox" id="selectAllColleges" onchange="toggleAllRouteColleges(this.checked)"> تحديد جميع الكليات</label>
-            </div>
-            <div id="routeColleges" class="checklist"></div>
-          </div>
-
-          <div id="routeRangesWrap" class="hidden" style="margin-top:16px">
-            <h4 style="margin:0 0 10px">نطاق الحروف</h4>
-            <div id="routeRanges"></div>
-          </div>
-
-          <div id="routeSummary" class="notice hidden" style="margin-top:16px"></div>
+          <div id="authorizedQueueSelector" class="checklist"></div>
+          <div id="activeQueueSummary" class="notice" style="margin-top:14px"></div>
 
           <div class="actions">
-            <button class="btn primary" onclick="savePermissions()">حفظ نطاق العمل</button>
+            <button class="btn primary" onclick="applyAuthorizedQueueSelection()">تطبيق قائمة الانتظار</button>
             <button class="btn" onclick="staffLogout()">تسجيل الخروج</button>
           </div>
         </div>
@@ -1211,9 +1179,16 @@ async function refreshStaffPermissions(){
   const newJson=JSON.stringify(updated || []);
 
   if(oldJson!==newJson){
+    const previousActive=staff.activePermissions || [];
     staff.permissions=updated;
+    staff.centralPermissions=[...updated];
+    staff.activePermissions=previousActive.filter(x=>updated.includes(x));
+    if(!staff.activePermissions.length && updated.length){
+      staff.activePermissions=[...updated];
+    }
     console.info("Central permissions refreshed.");
     if(document.getElementById("staff")?.classList.contains("active")){
+      renderAuthorizedQueueSelector();
       await refreshStaff();
     }
   }
@@ -1309,7 +1284,9 @@ async function staffLogin(){
     hallId:hasActiveHall ? counterRow.hall_id : null,
     hallName:hasActiveHall ? (counterRow.halls?.name || "") : "غير معين",
     hallSlug:hasActiveHall ? (counterRow.halls?.slug || "") : "",
-    permissions:centralPermissions
+    permissions:centralPermissions,
+    centralPermissions:[...centralPermissions],
+    activePermissions:[...centralPermissions]
   };
 
   document.getElementById("adminNavBtn").classList.toggle("hidden", profile.role!=="superuser");
@@ -1338,19 +1315,109 @@ async function staffLogout(){
   if(document.getElementById("staffHall")) document.getElementById("staffHall").value="";
   showView("visitor");
 }
+function permissionKeyLabel(key){
+  const parts=String(key||"").split("|");
+  const dept=parts[0];
+  let i=1;
+  const labels=[];
+
+  if(dept==="registration") labels.push("إدارة التسجيل");
+  else if(dept==="records") labels.push("إدارة السجلات");
+  else if(dept==="admissions") labels.push("إدارة القبول");
+  else if(dept==="graduates") labels.push("إدارة الخريجين");
+  else if(dept==="independent") labels.push("خدمة مستقلة");
+  else labels.push(dept);
+
+  if(dept==="graduates" && parts[i]){
+    labels.push(sectionLabel(parts[i]));
+    i++;
+  }
+
+  if(parts[i]){ labels.push(parts[i]); i++; }
+  if(parts[i]){ labels.push(parts[i]); i++; }
+  if(parts[i]) labels.push(`الحروف ${parts[i]}`);
+
+  return labels.join(" — ");
+}
+
 function renderPermissions(){
   const roleLabel=staff.role==="superuser" ? "مدير النظام" : "موظف";
   document.getElementById("staffIdentity").innerHTML=`الموظف: <b>${staff.name}</b> — الصلاحية: <b>${roleLabel}</b> — القاعة: <b>${staff.hallName}</b> — الكاونتر: <b>${staff.counter || "غير معين"}</b>`;
-  document.getElementById("routeDept").value="";
-  document.getElementById("routeSection").value="";
-  document.getElementById("routeSectionWrap").classList.add("hidden");
-  document.getElementById("routeServicesWrap").classList.add("hidden");
-  document.getElementById("routeCollegesWrap").classList.add("hidden");
-  document.getElementById("routeRangesWrap").classList.add("hidden");
-  document.getElementById("routeSummary").classList.add("hidden");
-  document.getElementById("routeServices").innerHTML="";
-  document.getElementById("routeColleges").innerHTML="";
-  document.getElementById("routeRanges").innerHTML="";
+
+  renderAuthorizedQueueSelector();
+}
+
+function renderAuthorizedQueueSelector(){
+  const box=document.getElementById("authorizedQueueSelector");
+  const summary=document.getElementById("activeQueueSummary");
+  if(!box || !staff) return;
+
+  const central=staff.centralPermissions || staff.permissions || [];
+  const active=staff.activePermissions || central;
+
+  if(!central.length){
+    box.innerHTML=`<div class="muted">لا توجد قوائم انتظار مصرح بها لهذا المستخدم. يرجى مراجعة مدير النظام.</div>`;
+    summary.textContent="لا توجد قائمة انتظار نشطة.";
+    return;
+  }
+
+  box.innerHTML=central.map((key,i)=>`
+    <label class="check">
+      <input type="checkbox"
+             class="authorized-queue"
+             value="${encodeURIComponent(key)}"
+             ${active.includes(key)?"checked":""}
+             onchange="syncAuthorizedQueueSelectAll()">
+      ${permissionKeyLabel(key)}
+    </label>
+  `).join("");
+
+  syncAuthorizedQueueSelectAll();
+  renderActiveQueueSummary();
+}
+
+function syncAuthorizedQueueSelectAll(){
+  const all=[...document.querySelectorAll(".authorized-queue")];
+  const checked=all.filter(x=>x.checked);
+  const selectAll=document.getElementById("selectAllAuthorizedQueues");
+  if(selectAll){
+    selectAll.checked=all.length>0 && checked.length===all.length;
+    selectAll.indeterminate=checked.length>0 && checked.length<all.length;
+  }
+}
+
+function toggleAllAuthorizedQueues(checked){
+  document.querySelectorAll(".authorized-queue").forEach(x=>x.checked=checked);
+  syncAuthorizedQueueSelectAll();
+}
+
+function renderActiveQueueSummary(){
+  const summary=document.getElementById("activeQueueSummary");
+  if(!summary || !staff) return;
+  const active=staff.activePermissions || [];
+  summary.innerHTML=active.length
+    ? `قوائم الانتظار النشطة على هذا الكاونتر: <b>${active.length}</b>`
+    : `لا توجد قائمة انتظار نشطة.`;
+}
+
+async function applyAuthorizedQueueSelection(){
+  if(!staff) return;
+
+  const selected=[...document.querySelectorAll(".authorized-queue:checked")]
+    .map(x=>decodeURIComponent(x.value));
+
+  if(!selected.length){
+    alert("يرجى اختيار قائمة انتظار واحدة على الأقل.");
+    return;
+  }
+
+  // Never allow the counter to activate a route outside the superuser-granted permissions.
+  const allowed=new Set(staff.centralPermissions || []);
+  staff.activePermissions=selected.filter(x=>allowed.has(x));
+  staff.permissions=[...staff.centralPermissions];
+
+  renderActiveQueueSummary();
+  await refreshStaff();
 }
 
 function currentHierarchyServices(dept,section){
@@ -1503,72 +1570,7 @@ function updateRouteSummary(){
 }
 
 function savePermissions(){
-  const dept=document.getElementById("routeDept").value;
-  const section=document.getElementById("routeSection").value;
-  const services=[...document.querySelectorAll(".route-service:checked")].map(x=>decodeURIComponent(x.value));
-  const colleges=[...document.querySelectorAll(".route-college:checked")].map(x=>decodeURIComponent(x.value));
-  const rangeNodes=[...document.querySelectorAll(".route-range:checked")];
-
-  if(!dept){
-    alert("يرجى اختيار الإدارة."); return;
-  }
-  if(dept==="graduates" && !section){
-    alert("يرجى اختيار القسم."); return;
-  }
-  if(!services.length){
-    alert("يرجى اختيار خدمة واحدة على الأقل."); return;
-  }
-
-  let permissions=[];
-
-  if(dept==="registration" || dept==="admissions"){
-    permissions=services.map(s=>`${dept}|${s}`);
-  }
-  else if(dept==="records"){
-    services.forEach(s=>{
-      if(s==="معاملات الكليات"){
-        if(!colleges.length) return;
-        colleges.forEach(c=>permissions.push(`records|معاملات الكليات|${c}`));
-      }else{
-        permissions.push(`records|${s}`);
-      }
-    });
-    if(services.includes("معاملات الكليات") && !colleges.length){
-      alert("يرجى اختيار كلية واحدة على الأقل لمعاملات الكليات."); return;
-    }
-  }
-  else if(dept==="graduates" && section==="reception"){
-    permissions=services.map(s=>`graduates|reception|${s}`);
-  }
-  else if(dept==="graduates" && ["activity","graduation"].includes(section)){
-    if(!colleges.length){
-      alert("يرجى اختيار كلية واحدة على الأقل."); return;
-    }
-    const selectedRanges={};
-    rangeNodes.forEach(x=>{
-      const c=decodeURIComponent(x.dataset.college);
-      const r=decodeURIComponent(x.value);
-      (selectedRanges[c] ||= []).push(r);
-    });
-
-    const missing=colleges.filter(c=>!(selectedRanges[c]||[]).length);
-    if(missing.length){
-      alert("يرجى اختيار نطاق حروف واحد على الأقل لكل كلية محددة."); return;
-    }
-
-    services.forEach(s=>{
-      colleges.forEach(c=>{
-        selectedRanges[c].forEach(r=>{
-          permissions.push(`graduates|${section}|${s}|${c}|${r}`);
-        });
-      });
-    });
-  }
-
-  staff.permissions=permissions;
-  console.info("Central permissions are managed by مدير النظام; local route storage is disabled.");
-  refreshStaff();
-  alert("تم حفظ نطاق عمل الكاونتر.");
+  alert("صلاحيات الخدمة تدار مركزياً من مدير النظام.");
 }
 
 function normalizeDbTicket(row){
@@ -1602,9 +1604,10 @@ async function eligibleTickets(){
     return [];
   }
 
+  const activePermissions=staff.activePermissions || staff.centralPermissions || staff.permissions || [];
   return (data || [])
     .map(normalizeDbTicket)
-    .filter(t=>staff.permissions.includes(routeKey(t)));
+    .filter(t=>activePermissions.includes(routeKey(t)));
 }
 
 async function refreshStaff(){
@@ -1631,8 +1634,11 @@ async function refreshStaff(){
   document.getElementById("staffQueue").innerHTML=q.length?q.map(t=>`
     <div class="qitem">
       <div><b>${t.number}</b><br><small>${ticketSummary(t)}</small></div>
-      <span class="tag">بانتظار الخدمة</span>
-    </div>`).join(""):`<div class="muted">لا توجد أدوار منتظرة للمسارات المحددة.</div>`;
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span class="tag">بانتظار الخدمة</span>
+        <button class="btn success" style="padding:7px 12px" onclick="callTicketById('${t.id}')">نداء</button>
+      </div>
+    </div>`).join(""):`<div class="muted">لا توجد أدوار منتظرة لقوائم الانتظار النشطة.</div>`;
 
   renderCurrent();
 }
@@ -1669,15 +1675,35 @@ async function callNext(){
 
   const q=await eligibleTickets();
   if(!q.length){
-    alert("لا توجد أدوار منتظرة للمسارات المحددة.");
+    alert("لا توجد أدوار منتظرة لقوائم الانتظار النشطة.");
     return;
   }
 
-  const candidate=q[0];
+  await callTicketById(q[0].id);
+}
+
+async function callTicketById(ticketId){
+  if(!staff?.hallId){
+    alert("يجب تعيين هذا الكاونتر إلى قاعة نشطة قبل نداء أي رقم.");
+    return;
+  }
+  if(!staff) return;
+  if(current){
+    alert("يرجى إنهاء الدور الحالي أولاً.");
+    return;
+  }
+
+  const q=await eligibleTickets();
+  const candidate=q.find(t=>t.id===ticketId);
+
+  if(!candidate){
+    await refreshStaff();
+    alert("هذا الدور لم يعد متاحاً لهذا الكاونتر.");
+    return;
+  }
+
   const now=new Date().toISOString();
 
-  // Claim the ticket only if it is still waiting. This reduces the chance
-  // of two counters calling the same ticket at the same time.
   const { data, error } = await supabaseClient
     .from("tickets")
     .update({
@@ -1698,7 +1724,7 @@ async function callNext(){
 
   if(!data || data.length===0){
     await refreshStaff();
-    alert("تم استدعاء هذا الدور من كاونتر آخر. يرجى الضغط على «التالي» مرة أخرى.");
+    alert("تم استدعاء هذا الدور من كاونتر آخر.");
     return;
   }
 
@@ -1811,10 +1837,7 @@ async function renderDisplay(){
   title.textContent=cfg.name;
 
   const { data, error } = await supabaseClient
-    .from("calls")
-    .select("ticket_number,counter_number,called_at,hall_id,department,section,service")
-    .order("called_at",{ascending:false})
-    .limit(60);
+    .rpc("get_display_calls",{p_slug:cfg.slug});
 
   if(error){
     console.error("Supabase display read failed:", error);
@@ -1823,15 +1846,7 @@ async function renderDisplay(){
     return;
   }
 
-  const filtered=(data || []).filter(c=>{
-    if(cfg.hall_id && Number(c.hall_id)!==Number(cfg.hall_id)) return false;
-    if(cfg.department && c.department!==cfg.department) return false;
-    if(cfg.section && c.section!==cfg.section) return false;
-    if(cfg.service && c.service!==cfg.service) return false;
-    if(Array.isArray(cfg.counter_numbers) && cfg.counter_numbers.length && !cfg.counter_numbers.includes(Number(c.counter_number))) return false;
-    return true;
-  }).slice(0,8);
-
+  const filtered=data || [];
   const latest=filtered[0];
 
   if(!latest){
