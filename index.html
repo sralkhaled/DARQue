@@ -367,8 +367,65 @@
         </div>
       </div>
 
+      <div id="manageUserPanel" class="card hidden" style="box-shadow:none;margin:0 0 18px;padding:18px;background:#f8fafc">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+          <div>
+            <h4 id="manageUserTitle" style="margin:0 0 4px">إدارة المستخدم</h4>
+            <div id="manageUserSubtitle" class="muted"></div>
+          </div>
+          <button class="btn" onclick="closeManageUserPanel()">إغلاق</button>
+        </div>
+
+        <div id="editUserFields" class="hidden">
+          <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+            <div class="field">
+              <label>اسم الموظف</label>
+              <input id="editStaffFullName" />
+            </div>
+            <div class="field">
+              <label>اسم المستخدم</label>
+              <input id="editStaffUsername" dir="ltr" />
+            </div>
+            <div class="field">
+              <label>الصلاحية</label>
+              <select id="editStaffRole" onchange="updateEditDepartmentState()">
+                <option value="staff">موظف</option>
+                <option value="superuser">مدير النظام</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>الإدارة</label>
+              <select id="editStaffDepartment">
+                <option value="">اختر الإدارة</option>
+                <option value="registration">إدارة التسجيل</option>
+                <option value="records">إدارة السجلات</option>
+                <option value="admissions">إدارة القبول</option>
+                <option value="graduates">إدارة الخريجين</option>
+              </select>
+            </div>
+          </div>
+          <div class="actions">
+            <button id="saveEditUserBtn" class="btn primary" onclick="saveEditedUser()">حفظ التعديلات</button>
+            <button class="btn" onclick="closeManageUserPanel()">إلغاء</button>
+          </div>
+        </div>
+
+        <div id="passwordUserFields" class="hidden">
+          <div class="field" style="max-width:420px">
+            <label>كلمة المرور الجديدة</label>
+            <input id="resetStaffPassword" type="password" placeholder="8 أحرف على الأقل" />
+          </div>
+          <div class="actions">
+            <button id="savePasswordBtn" class="btn primary" onclick="saveUserPassword()">تحديث كلمة المرور</button>
+            <button class="btn" onclick="closeManageUserPanel()">إلغاء</button>
+          </div>
+        </div>
+
+        <div id="manageUserMessage" class="notice hidden"></div>
+      </div>
+
       <div style="overflow:auto">
-        <table style="width:100%;border-collapse:collapse;min-width:760px">
+        <table style="width:100%;border-collapse:collapse;min-width:900px">
           <thead>
             <tr>
               <th style="text-align:right;padding:12px;border-bottom:1px solid var(--border)">اسم الموظف</th>
@@ -376,6 +433,7 @@
               <th style="text-align:right;padding:12px;border-bottom:1px solid var(--border)">الإدارة</th>
               <th style="text-align:right;padding:12px;border-bottom:1px solid var(--border)">الصلاحية</th>
               <th style="text-align:right;padding:12px;border-bottom:1px solid var(--border)">الحالة</th>
+              <th style="text-align:right;padding:12px;border-bottom:1px solid var(--border)">إجراء</th>
             </tr>
           </thead>
           <tbody id="adminUsersTable"></tbody>
@@ -1371,8 +1429,209 @@ function renderAdminUsers(){
       <td style="padding:12px;border-bottom:1px solid var(--border)">
         <span class="tag" style="${u.active ? "" : "background:#fff1f2;color:#b42318"}">${u.active ? "نشط" : "موقوف"}</span>
       </td>
+      <td style="padding:12px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn" style="padding:7px 10px" onclick="openEditUser('${u.id}')">تعديل</button>
+          <button class="btn" style="padding:7px 10px" onclick="openPasswordReset('${u.id}')">كلمة المرور</button>
+          <button class="btn" style="padding:7px 10px" onclick="toggleUserStatus('${u.id}', ${u.active ? "false" : "true"})">${u.active ? "إيقاف" : "تفعيل"}</button>
+        </div>
+      </td>
     </tr>
   `).join("");
+}
+
+let selectedManagedUser=null;
+
+function getAdminUserById(id){
+  return adminUsers.find(u=>u.id===id) || null;
+}
+
+function resetManageUserPanel(){
+  document.getElementById("editUserFields").classList.add("hidden");
+  document.getElementById("passwordUserFields").classList.add("hidden");
+  document.getElementById("manageUserMessage").classList.add("hidden");
+  document.getElementById("manageUserMessage").textContent="";
+}
+
+function closeManageUserPanel(){
+  document.getElementById("manageUserPanel").classList.add("hidden");
+  selectedManagedUser=null;
+  resetManageUserPanel();
+}
+
+function openEditUser(id){
+  const u=getAdminUserById(id);
+  if(!u) return;
+
+  selectedManagedUser=u;
+  resetManageUserPanel();
+
+  document.getElementById("manageUserTitle").textContent="تعديل المستخدم";
+  document.getElementById("manageUserSubtitle").textContent=u.full_name || u.username || "";
+  document.getElementById("editStaffFullName").value=u.full_name || "";
+  document.getElementById("editStaffUsername").value=u.username || "";
+  document.getElementById("editStaffRole").value=u.role || "staff";
+  document.getElementById("editStaffDepartment").value=u.department || "";
+  updateEditDepartmentState();
+
+  document.getElementById("editUserFields").classList.remove("hidden");
+  document.getElementById("manageUserPanel").classList.remove("hidden");
+  document.getElementById("manageUserPanel").scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+function openPasswordReset(id){
+  const u=getAdminUserById(id);
+  if(!u) return;
+
+  selectedManagedUser=u;
+  resetManageUserPanel();
+
+  document.getElementById("manageUserTitle").textContent="تعيين كلمة مرور جديدة";
+  document.getElementById("manageUserSubtitle").textContent=u.full_name || u.username || "";
+  document.getElementById("resetStaffPassword").value="";
+
+  document.getElementById("passwordUserFields").classList.remove("hidden");
+  document.getElementById("manageUserPanel").classList.remove("hidden");
+  document.getElementById("manageUserPanel").scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+function updateEditDepartmentState(){
+  const role=document.getElementById("editStaffRole").value;
+  const dept=document.getElementById("editStaffDepartment");
+  if(role==="superuser"){
+    dept.value="";
+    dept.disabled=true;
+  }else{
+    dept.disabled=false;
+  }
+}
+
+async function invokeManageStaff(body){
+  const { data, error } = await supabaseClient.functions.invoke("manage-staff-user", { body });
+
+  if(error){
+    let detailedMessage=error.message || "حدث خطأ غير متوقع.";
+    try{
+      if(error.context && typeof error.context.json==="function"){
+        const responseBody=await error.context.json();
+        if(responseBody?.error) detailedMessage=responseBody.error;
+        else if(responseBody?.message) detailedMessage=responseBody.message;
+      }
+    }catch(parseError){
+      console.error("Could not parse manage-staff-user error:", parseError);
+    }
+    throw new Error(detailedMessage);
+  }
+
+  if(data?.error) throw new Error(data.error);
+  return data;
+}
+
+async function saveEditedUser(){
+  if(!selectedManagedUser) return;
+
+  const full_name=document.getElementById("editStaffFullName").value.trim();
+  const username=document.getElementById("editStaffUsername").value.trim();
+  const role=document.getElementById("editStaffRole").value;
+  const department=document.getElementById("editStaffDepartment").value || null;
+  const msg=document.getElementById("manageUserMessage");
+  const btn=document.getElementById("saveEditUserBtn");
+
+  if(!full_name || !username){
+    msg.textContent="يرجى استكمال بيانات المستخدم.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  if(role==="staff" && !department){
+    msg.textContent="يرجى تحديد الإدارة للموظف.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  btn.disabled=true;
+  btn.textContent="جاري الحفظ...";
+  msg.classList.add("hidden");
+
+  try{
+    const data=await invokeManageStaff({
+      action:"update",
+      user_id:selectedManagedUser.id,
+      full_name,
+      username,
+      role,
+      department
+    });
+
+    msg.textContent=data?.message || "تم تحديث بيانات المستخدم بنجاح.";
+    msg.classList.remove("hidden");
+    await loadAdminUsers();
+    setTimeout(()=>closeManageUserPanel(),900);
+  }catch(err){
+    msg.textContent=`تعذر تحديث المستخدم: ${err.message}`;
+    msg.classList.remove("hidden");
+  }finally{
+    btn.disabled=false;
+    btn.textContent="حفظ التعديلات";
+  }
+}
+
+async function saveUserPassword(){
+  if(!selectedManagedUser) return;
+
+  const password=document.getElementById("resetStaffPassword").value;
+  const msg=document.getElementById("manageUserMessage");
+  const btn=document.getElementById("savePasswordBtn");
+
+  if(!password || password.length<8){
+    msg.textContent="يجب ألا تقل كلمة المرور عن 8 أحرف.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  btn.disabled=true;
+  btn.textContent="جاري التحديث...";
+  msg.classList.add("hidden");
+
+  try{
+    const data=await invokeManageStaff({
+      action:"password",
+      user_id:selectedManagedUser.id,
+      password
+    });
+
+    msg.textContent=data?.message || "تم تحديث كلمة المرور بنجاح.";
+    msg.classList.remove("hidden");
+    document.getElementById("resetStaffPassword").value="";
+    setTimeout(()=>closeManageUserPanel(),900);
+  }catch(err){
+    msg.textContent=`تعذر تحديث كلمة المرور: ${err.message}`;
+    msg.classList.remove("hidden");
+  }finally{
+    btn.disabled=false;
+    btn.textContent="تحديث كلمة المرور";
+  }
+}
+
+async function toggleUserStatus(id, newActive){
+  const u=getAdminUserById(id);
+  if(!u) return;
+
+  const actionLabel=newActive ? "تفعيل" : "إيقاف";
+  if(!confirm(`هل أنت متأكد من ${actionLabel} المستخدم «${u.full_name || u.username}»؟`)) return;
+
+  try{
+    const data=await invokeManageStaff({
+      action:"status",
+      user_id:id,
+      active:newActive
+    });
+
+    alert(data?.message || (newActive ? "تم تفعيل المستخدم." : "تم إيقاف المستخدم."));
+    await loadAdminUsers();
+  }catch(err){
+    alert(`تعذر تحديث حالة المستخدم: ${err.message}`);
+  }
 }
 
 function openAddUserForm(){
