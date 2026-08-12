@@ -475,11 +475,17 @@
           </div>
           <div class="field hidden" id="displaySectionWrap">
             <label>القسم</label>
-            <select id="displaySection">
+            <select id="displaySection" onchange="populateDisplayServices()">
               <option value="">جميع أقسام الخريجين</option>
               <option value="reception">قسم الاستقبال</option>
               <option value="activity">قسم نشاط الخريج</option>
               <option value="graduation">قسم شؤون التخرج</option>
+            </select>
+          </div>
+          <div class="field hidden" id="displayServiceWrap">
+            <label>الخدمة</label>
+            <select id="displayService">
+              <option value="">جميع الخدمات</option>
             </select>
           </div>
           <div class="field">
@@ -1711,7 +1717,8 @@ async function pushCall(t){
       counter_number:Number(staff.counter),
       hall_id:staff.hallId,
       department:t.dept,
-      section:t.section || null
+      section:t.section || null,
+      service:t.service
     });
 
   if(error){
@@ -1805,7 +1812,7 @@ async function renderDisplay(){
 
   const { data, error } = await supabaseClient
     .from("calls")
-    .select("ticket_number,counter_number,called_at,hall_id,department,section")
+    .select("ticket_number,counter_number,called_at,hall_id,department,section,service")
     .order("called_at",{ascending:false})
     .limit(60);
 
@@ -1820,6 +1827,7 @@ async function renderDisplay(){
     if(cfg.hall_id && Number(c.hall_id)!==Number(cfg.hall_id)) return false;
     if(cfg.department && c.department!==cfg.department) return false;
     if(cfg.section && c.section!==cfg.section) return false;
+    if(cfg.service && c.service!==cfg.service) return false;
     if(Array.isArray(cfg.counter_numbers) && cfg.counter_numbers.length && !cfg.counter_numbers.includes(Number(c.counter_number))) return false;
     return true;
   }).slice(0,8);
@@ -1859,7 +1867,7 @@ setInterval(()=>{
 async function loadHallsAndDisplays(){
   const [{data:hallData,error:hallError},{data:displayData,error:displayError}] = await Promise.all([
     supabaseClient.from("halls").select("id,name,slug,active,sort_order").order("sort_order",{ascending:true}),
-    supabaseClient.from("display_configs").select("id,name,slug,hall_id,department,section,counter_numbers,active,halls(name,slug)").order("id",{ascending:true})
+    supabaseClient.from("display_configs").select("id,name,slug,hall_id,department,section,service,counter_numbers,active,halls(name,slug)").order("id",{ascending:true})
   ]);
 
   if(hallError) console.error("Hall load failed:",hallError);
@@ -2002,6 +2010,7 @@ async function openDisplayManagement(){
   await loadHallsAndDisplays();
   renderDisplayAdminTable();
   displayDeptChanged();
+  populateDisplayServices();
   document.getElementById("displayManagementPanel").scrollIntoView({behavior:"smooth",block:"start"});
 }
 
@@ -2017,6 +2026,39 @@ function displayDeptChanged(){
     wrap.classList.add("hidden");
     document.getElementById("displaySection").value="";
   }
+  populateDisplayServices();
+}
+
+function populateDisplayServices(){
+  const dept=document.getElementById("displayDept").value;
+  const section=dept==="graduates" ? (document.getElementById("displaySection").value || null) : null;
+  const wrap=document.getElementById("displayServiceWrap");
+  const select=document.getElementById("displayService");
+
+  if(!dept){
+    wrap.classList.add("hidden");
+    select.innerHTML=`<option value="">جميع الخدمات</option>`;
+    return;
+  }
+
+  let services=serviceCatalog.filter(s=>s.active && s.department===dept);
+
+  if(dept==="graduates"){
+    if(section) services=services.filter(s=>s.section===section);
+    else services=[];
+  }else{
+    services=services.filter(s=>!s.section);
+  }
+
+  if(!services.length){
+    wrap.classList.add("hidden");
+    select.innerHTML=`<option value="">جميع الخدمات</option>`;
+    return;
+  }
+
+  wrap.classList.remove("hidden");
+  select.innerHTML=`<option value="">جميع الخدمات</option>` +
+    services.map(s=>`<option value="${s.service_name}">${s.service_name}</option>`).join("");
 }
 
 function parseCounterList(value){
@@ -2030,6 +2072,7 @@ async function saveDisplayConfig(){
   const hallValue=document.getElementById("displayHall").value;
   const department=document.getElementById("displayDept").value || null;
   const section=department==="graduates" ? (document.getElementById("displaySection").value || null) : null;
+  const service=department ? (document.getElementById("displayService").value || null) : null;
   const counter_numbers=parseCounterList(document.getElementById("displayCounters").value);
   const hall_id=hallValue ? Number(hallValue) : null;
   const msg=document.getElementById("displayAdminMessage");
@@ -2053,7 +2096,7 @@ async function saveDisplayConfig(){
   }
 
   const {error}=await supabaseClient.from("display_configs").insert({
-    name,slug,hall_id,department,section,
+    name,slug,hall_id,department,section,service,
     counter_numbers:counter_numbers.length ? counter_numbers : null,
     active:true
   });
@@ -2069,6 +2112,7 @@ async function saveDisplayConfig(){
   document.getElementById("displayName").value="";
   document.getElementById("displaySlug").value="";
   document.getElementById("displayCounters").value="";
+  document.getElementById("displayService").value="";
   await loadHallsAndDisplays();
   renderDisplayAdminTable();
 }
@@ -2100,7 +2144,7 @@ function renderDisplayAdminTable(){
 
   body.innerHTML=displayConfigs.map(d=>{
     const hall=d.halls?.name || "—";
-    const route=[d.department?departmentLabel(d.department):null,d.section?sectionLabel(d.section):null].filter(Boolean).join(" / ") || "—";
+    const route=[d.department?departmentLabel(d.department):null,d.section?sectionLabel(d.section):null,d.service||null].filter(Boolean).join(" / ") || "—";
     const counters=(d.counter_numbers||[]).map(x=>`كاونتر ${x}`).join("، ") || "—";
     return `
       <tr>
