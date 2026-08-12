@@ -180,23 +180,15 @@
 
           <p class="muted">اختر موقع العمل الحالي ثم قائمة الانتظار التي سيخدمها هذا الكاونتر من الصلاحيات التي حددها مدير النظام.</p>
 
-          <div class="grid" style="grid-template-columns:2fr 1fr;gap:12px;margin-top:12px">
-            <div class="field">
-              <label>القاعة</label>
-              <select id="staffWorkHall" onchange="populateStaffWorkCounters()">
-                <option value="">اختر القاعة</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>الكاونتر</label>
-              <select id="staffWorkCounter">
-                <option value="">اختر الكاونتر</option>
-              </select>
-            </div>
+          <div class="field" style="margin-top:12px">
+            <label>الكاونتر</label>
+            <select id="staffWorkstation">
+              <option value="">اختر الكاونتر</option>
+            </select>
           </div>
 
           <div class="actions" style="margin-top:0">
-            <button class="btn primary" onclick="applyStaffWorkstation()">تحديد موقع العمل</button>
+            <button class="btn primary" onclick="applyStaffWorkstation()">تحديد الكاونتر</button>
           </div>
 
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:12px 0 10px">
@@ -429,19 +421,19 @@
           <button class="btn primary" onclick="saveHall()">إضافة القاعة</button>
         </div>
 
-        <h4 style="margin:20px 0 8px">تعيين كاونتر إلى قاعة</h4>
+        <h4 style="margin:20px 0 8px">إدارة الكاونترات</h4>
         <div class="grid" style="grid-template-columns:1fr 2fr;gap:12px">
           <div class="field">
             <label>رقم الكاونتر</label>
             <input id="hallCounterNo" type="number" min="1" placeholder="مثال: 12" />
           </div>
           <div class="field">
-            <label>القاعة</label>
+            <label>القاعة (اختياري)</label>
             <select id="hallCounterHall"></select>
           </div>
         </div>
         <div class="actions">
-          <button class="btn primary" onclick="assignCounterToHall()">حفظ تعيين الكاونتر</button>
+          <button class="btn primary" onclick="assignCounterToHall()">حفظ الكاونتر</button>
         </div>
 
         <div style="overflow:auto;margin-top:18px">
@@ -1351,48 +1343,47 @@ async function loadAvailableWorkCounters(){
     return false;
   }
 
-  availableWorkCounters=(data || []).filter(c=>c.halls?.active);
-  populateStaffWorkCounters();
+  availableWorkCounters=(data || []).filter(c=>!c.hall_id || c.halls?.active);
+  populateStaffWorkstations();
   return true;
 }
 
-function populateStaffWorkCounters(){
-  const hallEl=document.getElementById("staffWorkHall");
-  const counterEl=document.getElementById("staffWorkCounter");
-  if(!hallEl || !counterEl) return;
+function workstationLabel(c){
+  if(c.hall_id && c.halls?.name) return `${c.halls.name} — كاونتر ${c.counter_number}`;
+  return `كاونتر ${c.counter_number} — بدون قاعة`;
+}
 
-  const hallId=Number(hallEl.value || 0);
-  const rows=availableWorkCounters.filter(c=>Number(c.hall_id)===hallId);
+function populateStaffWorkstations(){
+  const el=document.getElementById("staffWorkstation");
+  if(!el) return;
 
-  counterEl.innerHTML=`<option value="">اختر الكاونتر</option>` +
-    rows.map(c=>`<option value="${c.id}">كاونتر ${c.counter_number}</option>`).join("");
+  const current=staff?.counterId ? String(staff.counterId) : el.value;
+  el.innerHTML=`<option value="">اختر الكاونتر</option>` +
+    availableWorkCounters.map(c=>`<option value="${c.id}">${workstationLabel(c)}</option>`).join("");
+
+  if([...el.options].some(o=>o.value===current)) el.value=current;
 }
 
 async function applyStaffWorkstation(){
   if(!staff) return;
 
-  const hallId=Number(document.getElementById("staffWorkHall").value || 0);
-  const counterId=Number(document.getElementById("staffWorkCounter").value || 0);
-
-  if(!hallId || !counterId){
-    alert("يرجى اختيار القاعة والكاونتر.");
+  const counterId=Number(document.getElementById("staffWorkstation").value || 0);
+  if(!counterId){
+    alert("يرجى اختيار الكاونتر.");
     return;
   }
 
-  const row=availableWorkCounters.find(
-    c=>Number(c.id)===counterId && Number(c.hall_id)===hallId
-  );
-
+  const row=availableWorkCounters.find(c=>Number(c.id)===counterId);
   if(!row){
-    alert("الكاونتر المحدد غير متاح في هذه القاعة.");
+    alert("الكاونتر المحدد غير متاح.");
     return;
   }
 
   staff.counterId=row.id;
   staff.counter=String(row.counter_number);
-  staff.hallId=row.hall_id;
-  staff.hallName=row.halls?.name || "";
-  staff.hallSlug=row.halls?.slug || "";
+  staff.hallId=row.hall_id || null;
+  staff.hallName=row.hall_id ? (row.halls?.name || "غير معين") : "بدون قاعة";
+  staff.hallSlug=row.hall_id ? (row.halls?.slug || "") : "";
 
   renderPermissions();
   await refreshStaff();
@@ -1427,14 +1418,7 @@ function renderPermissions(){
   const roleLabel=staff.role==="superuser" ? "مدير النظام" : "موظف";
   document.getElementById("staffIdentity").innerHTML=`الموظف: <b>${staff.name}</b> — الصلاحية: <b>${roleLabel}</b> — القاعة: <b>${staff.hallName}</b> — الكاونتر: <b>${staff.counter || "غير معين"}</b>`;
 
-  const hallEl=document.getElementById("staffWorkHall");
-  if(hallEl && staff.hallId){
-    hallEl.value=String(staff.hallId);
-    populateStaffWorkCounters();
-    const counterEl=document.getElementById("staffWorkCounter");
-    if(counterEl && staff.counterId) counterEl.value=String(staff.counterId);
-  }
-
+  populateStaffWorkstations();
   renderAuthorizedQueueSelector();
 }
 
@@ -1708,12 +1692,16 @@ async function refreshStaff(){
 
   document.getElementById("waitingCount").textContent=q.length;
 
-  const { count: servedCount, error: servedError } = await supabaseClient
+  let servedQuery=supabaseClient
     .from("tickets")
     .select("id",{count:"exact",head:true})
     .eq("status","done")
-    .eq("hall_id",Number(staff.hallId))
     .eq("counter_number",Number(staff.counter));
+
+  if(staff.hallId) servedQuery=servedQuery.eq("hall_id",Number(staff.hallId));
+  else servedQuery=servedQuery.is("hall_id",null);
+
+  const { count: servedCount, error: servedError } = await servedQuery;
 
   if(servedError){
     console.error("Supabase served-count read failed:", servedError);
@@ -1754,8 +1742,8 @@ function renderCurrent(){
 }
 
 async function callNext(){
-  if(!staff?.hallId){
-    alert("يرجى تحديد موقع العمل (القاعة والكاونتر) قبل نداء أي رقم.");
+  if(!staff?.counterId){
+    alert("يرجى تحديد الكاونتر قبل نداء أي رقم.");
     return;
   }
   if(!staff) return;
@@ -1774,8 +1762,8 @@ async function callNext(){
 }
 
 async function callTicketById(ticketId){
-  if(!staff?.hallId){
-    alert("يرجى تحديد موقع العمل (القاعة والكاونتر) قبل نداء أي رقم.");
+  if(!staff?.counterId){
+    alert("يرجى تحديد الكاونتر قبل نداء أي رقم.");
     return;
   }
   if(!staff) return;
@@ -2113,14 +2101,7 @@ function populateHallSelects(){
   const opts=halls.filter(h=>h.active).map(h=>`<option value="${h.id}">${h.name}</option>`).join("");
 
   const counterHall=document.getElementById("hallCounterHall");
-  if(counterHall) counterHall.innerHTML=`<option value="">اختر القاعة</option>${opts}`;
-
-  const staffWorkHall=document.getElementById("staffWorkHall");
-  if(staffWorkHall){
-    const current=staffWorkHall.value;
-    staffWorkHall.innerHTML=`<option value="">اختر القاعة</option>${opts}`;
-    if([...staffWorkHall.options].some(o=>o.value===current)) staffWorkHall.value=current;
-  }
+  if(counterHall) counterHall.innerHTML=`<option value="">بدون قاعة</option>${opts}`;
 
   const displayHall=document.getElementById("displayHall");
   if(displayHall) displayHall.innerHTML=`<option value="">جميع القاعات / غير محدد</option>${opts}`;
@@ -2177,57 +2158,90 @@ async function saveHall(){
 
 async function assignCounterToHall(){
   const counter=Number(document.getElementById("hallCounterNo").value);
-  const hall_id=Number(document.getElementById("hallCounterHall").value);
+  const hallValue=document.getElementById("hallCounterHall").value;
+  const hall_id=hallValue ? Number(hallValue) : null;
   const msg=document.getElementById("hallAdminMessage");
 
-  if(!counter || !hall_id){
-    msg.textContent="يرجى إدخال رقم الكاونتر واختيار القاعة.";
+  if(!counter){
+    msg.textContent="يرجى إدخال رقم الكاونتر.";
     msg.classList.remove("hidden");
     return;
   }
 
-  const {error}=await supabaseClient.from("counters").upsert(
-    {counter_number:counter,hall_id,active:true},
-    {onConflict:"hall_id,counter_number"}
-  );
+  let existingQuery=supabaseClient.from("counters").select("id").eq("counter_number",counter);
+  if(hall_id) existingQuery=existingQuery.eq("hall_id",hall_id);
+  else existingQuery=existingQuery.is("hall_id",null);
+
+  const {data:existing,error:readError}=await existingQuery.maybeSingle();
+  if(readError){
+    msg.textContent=`تعذر التحقق من الكاونتر: ${readError.message}`;
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  let error=null;
+  if(existing?.id){
+    ({error}=await supabaseClient.from("counters").update({active:true}).eq("id",existing.id));
+  }else{
+    ({error}=await supabaseClient.from("counters").insert({counter_number:counter,hall_id,active:true}));
+  }
 
   if(error){
-    msg.textContent=`تعذر حفظ تعيين الكاونتر: ${error.message}`;
+    msg.textContent=error.code==="23505"
+      ? "هذا رقم الكاونتر موجود مسبقاً في نفس الموقع."
+      : `تعذر حفظ الكاونتر: ${error.message}`;
     msg.classList.remove("hidden");
     return;
   }
 
-  msg.textContent="تم تعيين الكاونتر إلى القاعة بنجاح.";
+  msg.textContent=hall_id
+    ? "تم حفظ الكاونتر وتعيينه إلى القاعة بنجاح."
+    : "تم حفظ الكاونتر بدون قاعة بنجاح.";
   msg.classList.remove("hidden");
   document.getElementById("hallCounterNo").value="";
+  document.getElementById("hallCounterHall").value="";
   await renderHallAdminTable();
+  if(staff) await loadAvailableWorkCounters();
 }
 
 async function renderHallAdminTable(){
   const {data:counters,error}=await supabaseClient
     .from("counters")
-    .select("counter_number,active,hall_id")
+    .select("id,counter_number,active,hall_id")
     .order("counter_number",{ascending:true});
 
   if(error) console.error("Counter admin read failed:",error);
 
   const byHall={};
+  const unassigned=[];
   (counters||[]).forEach(c=>{
-    if(c.hall_id) (byHall[c.hall_id] ||= []).push(c.counter_number);
+    if(c.hall_id) (byHall[c.hall_id] ||= []).push(c);
+    else unassigned.push(c);
   });
 
   const body=document.getElementById("hallAdminTable");
-  body.innerHTML=halls.map(h=>`
+
+  const hallRows=halls.map(h=>`
     <tr>
       <td style="padding:10px;border-bottom:1px solid var(--border)"><b>${h.name}</b></td>
       <td style="padding:10px;border-bottom:1px solid var(--border)" dir="ltr">${h.slug}</td>
-      <td style="padding:10px;border-bottom:1px solid var(--border)">${(byHall[h.id]||[]).map(x=>`كاونتر ${x}`).join("، ") || "—"}</td>
+      <td style="padding:10px;border-bottom:1px solid var(--border)">${(byHall[h.id]||[]).map(x=>`كاونتر ${x.counter_number}`).join("، ") || "—"}</td>
       <td style="padding:10px;border-bottom:1px solid var(--border)"><span class="tag">${h.active?"نشطة":"موقوفة"}</span></td>
       <td style="padding:10px;border-bottom:1px solid var(--border)">
         <button class="btn" style="padding:7px 10px" onclick="toggleHall(${h.id},${h.active?"false":"true"})">${h.active?"إيقاف":"تفعيل"}</button>
       </td>
-    </tr>
-  `).join("");
+    </tr>`).join("");
+
+  const noHallRow=`
+    <tr>
+      <td style="padding:10px;border-bottom:1px solid var(--border)"><b>بدون قاعة</b></td>
+      <td style="padding:10px;border-bottom:1px solid var(--border)">—</td>
+      <td style="padding:10px;border-bottom:1px solid var(--border)">${unassigned.map(x=>`كاونتر ${x.counter_number}`).join("، ") || "—"}</td>
+      <td style="padding:10px;border-bottom:1px solid var(--border)"><span class="tag">متاح</span></td>
+      <td style="padding:10px;border-bottom:1px solid var(--border)">—</td>
+    </tr>`;
+
+  body.innerHTML=hallRows+noHallRow;
 }
 
 async function toggleHall(id,active){
