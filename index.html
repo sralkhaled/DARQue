@@ -845,23 +845,68 @@ function savePermissions(){
   alert("تم حفظ نطاق عمل الكاونتر.");
 }
 
-function eligibleTickets(){
-  if(!staff) return [];
-  return getTickets().filter(t=>t.status==="waiting" && staff.permissions.includes(routeKey(t))).sort((a,b)=>a.createdAt-b.createdAt);
+function normalizeDbTicket(row){
+  return {
+    id: row.id,
+    number: row.ticket_number,
+    dept: row.department,
+    section: row.section,
+    service: row.service,
+    college: row.college,
+    letter: row.name_letter,
+    range: row.letter_range,
+    status: row.status,
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    calledAt: row.called_at ? new Date(row.called_at).getTime() : null,
+    counter: row.counter_number
+  };
 }
 
-function refreshStaff(){
+async function eligibleTickets(){
+  if(!staff) return [];
+
+  const { data, error } = await supabaseClient
+    .from("tickets")
+    .select("*")
+    .eq("status","waiting")
+    .order("created_at",{ascending:true});
+
+  if(error){
+    console.error("Supabase queue read failed:", error);
+    return [];
+  }
+
+  return (data || [])
+    .map(normalizeDbTicket)
+    .filter(t=>staff.permissions.includes(routeKey(t)));
+}
+
+async function refreshStaff(){
   if(!staff) return;
-  const q=eligibleTickets();
+
+  const q=await eligibleTickets();
+
   document.getElementById("waitingCount").textContent=q.length;
-  const served=getTickets().filter(t=>t.status==="done" && String(t.counter)===String(staff.counter)).length;
-  document.getElementById("servedCount").textContent=served;
+
+  const { count: servedCount, error: servedError } = await supabaseClient
+    .from("tickets")
+    .select("id",{count:"exact",head:true})
+    .eq("status","done")
+    .eq("counter_number",Number(staff.counter));
+
+  if(servedError){
+    console.error("Supabase served-count read failed:", servedError);
+  }
+
+  document.getElementById("servedCount").textContent=servedCount ?? 0;
   document.getElementById("counterCurrent").textContent=current?current.number:"—";
+
   document.getElementById("staffQueue").innerHTML=q.length?q.map(t=>`
     <div class="qitem">
       <div><b>${t.number}</b><br><small>${ticketSummary(t)}</small></div>
       <span class="tag">بانتظار الخدمة</span>
     </div>`).join(""):`<div class="muted">لا توجد أدوار منتظرة للمسارات المحددة.</div>`;
+
   renderCurrent();
 }
 
@@ -884,46 +929,131 @@ function renderCurrent(){
     <div style="margin-top:10px"><span class="tag">كاونتر ${staff.counter}</span></div>`;
 }
 
-function callNext(){
-  if(!staff){return;}
-  if(current){ alert("يرجى إنهاء الدور الحالي أولاً."); return; }
-  const q=eligibleTickets();
-  if(!q.length){ alert("لا توجد أدوار منتظرة للمسارات المحددة."); return; }
-  const t=q[0];
-  let tickets=getTickets();
-  const idx=tickets.findIndex(x=>x.id===t.id);
-  tickets[idx].status="called"; tickets[idx].counter=staff.counter; tickets[idx].calledAt=Date.now();
-  saveTickets(tickets);
-  current=tickets[idx];
-  pushCall(current);
-  refreshStaff(); renderDisplay();
+async function callNext(){
+  if(!staff) return;
+  if(current){
+    alert("يرجى إنهاء الدور الحالي أولاً.");
+    return;
+  }
+
+  const q=await eligibleTickets();
+  if(!q.length){
+    alert("لا توجد أدوار منتظرة للمسارات المحددة.");
+    return;
+  }
+
+  const candidate=q[0];
+  const now=new Date().toISOString();
+
+  // Claim the ticket only if it is still waiting. This reduces the chance
+  // of two counters calling the same ticket at the same time.
+  const { data, error } = await supabaseClient
+    .from("tickets")
+    .update({
+      status:"called",
+      counter_number:Number(staff.counter),
+      called_at:now
+    })
+    .eq("id",candidate.id)
+    .eq("status","waiting")
+    .select("*");
+
+  if(error){
+    console.error("Supabase ticket call failed:", error);
+    alert("تعذر استدعاء الدور. يرجى المحاولة مرة أخرى.");
+    return;
+  }
+
+  if(!data || data.length===0){
+    await refreshStaff();
+    alert("تم استدعاء هذا الدور من كاونتر آخر. يرجى الضغط على «التالي» مرة أخرى.");
+    return;
+  }
+
+  current=normalizeDbTicket(data[0]);
+  await pushCall(current);
+  await refreshStaff();
+  renderDisplay();
 }
 
-function pushCall(t){
+async function pushCall(t){
+  const { error } = await supabaseClient
+    .from("calls")
+    .insert({
+      ticket_id:t.id,
+      ticket_number:t.number,
+      counter_number:Number(staff.counter)
+    });
+
+  if(error){
+    console.error("Supabase call history insert failed:", error);
+  }
+
+  // Keep local display history for this browser until the public display
+  // is connected to Supabase in the next stage.
   let calls=getCalls();
-  calls.push({number:t.number,counter:t.counter,time:Date.now()});
+  calls.push({number:t.number,counter:staff.counter,time:Date.now()});
   saveCalls(calls);
 }
 
-function recall(){
-  if(!current){ alert("لا يوجد دور حالي."); return; }
-  pushCall(current); renderDisplay();
+async function recall(){
+  if(!current){
+    alert("لا يوجد دور حالي.");
+    return;
+  }
+  await pushCall(current);
+  renderDisplay();
 }
 
-function completeCurrent(){
-  if(!current){ alert("لا يوجد دور حالي."); return; }
-  let tickets=getTickets(); const idx=tickets.findIndex(x=>x.id===current.id);
-  if(idx>=0){ tickets[idx].status="done"; tickets[idx].doneAt=Date.now(); saveTickets(tickets); }
-  current=null; refreshStaff(); renderDisplay();
+async function completeCurrent(){
+  if(!current){
+    alert("لا يوجد دور حالي.");
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from("tickets")
+    .update({
+      status:"done",
+      completed_at:new Date().toISOString()
+    })
+    .eq("id",current.id);
+
+  if(error){
+    console.error("Supabase complete-ticket update failed:", error);
+    alert("تعذر إنهاء الخدمة. يرجى المحاولة مرة أخرى.");
+    return;
+  }
+
+  current=null;
+  await refreshStaff();
+  renderDisplay();
 }
 
-function markNoShow(){
-  if(!current){ alert("لا يوجد دور حالي."); return; }
-  let tickets=getTickets(); const idx=tickets.findIndex(x=>x.id===current.id);
-  if(idx>=0){ tickets[idx].status="noshow"; tickets[idx].doneAt=Date.now(); saveTickets(tickets); }
-  current=null; refreshStaff(); renderDisplay();
-}
+async function markNoShow(){
+  if(!current){
+    alert("لا يوجد دور حالي.");
+    return;
+  }
 
+  const { error } = await supabaseClient
+    .from("tickets")
+    .update({
+      status:"noshow",
+      completed_at:new Date().toISOString()
+    })
+    .eq("id",current.id);
+
+  if(error){
+    console.error("Supabase no-show update failed:", error);
+    alert("تعذر تحديث حالة الدور. يرجى المحاولة مرة أخرى.");
+    return;
+  }
+
+  current=null;
+  await refreshStaff();
+  renderDisplay();
+}
 function renderDisplay(){
   const calls=getCalls();
   const latest=calls[calls.length-1];
