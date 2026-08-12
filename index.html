@@ -197,6 +197,7 @@
               <option value="records">إدارة السجلات</option>
               <option value="admissions">إدارة القبول</option>
               <option value="graduates">إدارة الخريجين</option>
+              <option value="independent">خدمة مستقلة (بدون إدارة)</option>
             </select>
           </div>
 
@@ -470,6 +471,7 @@
               <option value="records">إدارة السجلات</option>
               <option value="admissions">إدارة القبول</option>
               <option value="graduates">إدارة الخريجين</option>
+              <option value="independent">خدمات مستقلة</option>
             </select>
           </div>
           <div class="field hidden" id="displaySectionWrap">
@@ -545,6 +547,10 @@
             <label>اسم الخدمة</label>
             <input id="svcName" placeholder="اسم الخدمة" />
           </div>
+          <div class="field hidden" id="svcPrefixWrap">
+            <label>بادئة رقم الانتظار</label>
+            <input id="svcPrefix" maxlength="3" placeholder="مثال: ع" />
+          </div>
           <div class="field">
             <label>ترتيب العرض</label>
             <input id="svcSort" type="number" value="100" min="0" />
@@ -596,6 +602,7 @@
               <option value="records">إدارة السجلات</option>
               <option value="admissions">إدارة القبول</option>
               <option value="graduates">إدارة الخريجين</option>
+              <option value="independent">خدمات مستقلة</option>
             </select>
           </div>
           <div class="field hidden" id="permSectionWrap">
@@ -901,7 +908,22 @@ function visitorHome(){
         ["admissions","إدارة القبول","خدمات القبول والتقديم"],
         ["graduates","إدارة الخريجين","الاستقبال ونشاط الخريج وشؤون التخرج"]
       ].map(x=>`<div class="card choice" onclick="chooseDept('${x[0]}')"><strong>${x[1]}</strong><span>${x[2]}</span></div>`).join("")}
+      ${catalogServices("independent").map((s,i)=>`<div class="card choice" onclick="chooseIndependentService(${i})"><strong>${s.service_name}</strong><span>خدمة مستقلة</span></div>`).join("")}
     </div>`;
+}
+
+function chooseIndependentService(i){
+  const services=catalogServices("independent");
+  const svc=services[i];
+  if(!svc) return;
+
+  visitorState.dept="independent";
+  visitorState.section=null;
+  visitorState.service=svc.service_name;
+  visitorState.serviceMeta=svc;
+  visitorState.college=null;
+  visitorState.letter=null;
+  issueTicket();
 }
 
 function chooseDept(d){
@@ -930,6 +952,7 @@ function renderGraduateSections(){
 function chooseGradSection(s){ visitorState.section=s; renderServices(); }
 
 function currentConfig(){
+  if(visitorState.dept==="independent") return {name:"خدمة مستقلة",services:[]};
   if(visitorState.dept==="graduates") return departments.graduates.sections[visitorState.section];
   return departments[visitorState.dept];
 }
@@ -942,6 +965,9 @@ function catalogServices(dept, section=null, includeInactive=false){
   ).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0) || a.service_name.localeCompare(b.service_name,"ar"));
 
   if(rows.length) return rows;
+
+  // Independent services exist only in the central catalog.
+  if(dept==="independent") return [];
 
   // Safe fallback to original embedded catalog.
   if(dept==="graduates"){
@@ -2114,7 +2140,7 @@ async function applyDisplayUrl(){
 async function loadServiceCatalog(){
   const { data, error } = await supabaseClient
     .from("service_catalog")
-    .select("id,department,section,service_name,requires_college,requires_letter,active,sort_order")
+    .select("id,department,section,service_name,requires_college,requires_letter,ticket_prefix,active,sort_order")
     .order("sort_order",{ascending:true});
 
   if(error){
@@ -2136,7 +2162,7 @@ function sectionLabel(value){
 }
 
 function serviceRouteRule(dept,section){
-  if(dept==="registration" || dept==="admissions") return {college:false,letter:false,locked:true};
+  if(dept==="registration" || dept==="admissions" || dept==="independent") return {college:false,letter:false,locked:true};
   if(dept==="records") return {college:null,letter:false,locked:false};
   if(dept==="graduates" && section==="reception") return {college:false,letter:false,locked:true};
   if(dept==="graduates" && ["activity","graduation"].includes(section)) return {college:true,letter:true,locked:true};
@@ -2166,6 +2192,13 @@ function serviceAdminRouteChanged(){
   }else{
     sectionWrap.classList.add("hidden");
     sectionEl.value="";
+  }
+
+  const prefixWrap=document.getElementById("svcPrefixWrap");
+  if(dept==="independent") prefixWrap.classList.remove("hidden");
+  else{
+    prefixWrap.classList.add("hidden");
+    document.getElementById("svcPrefix").value="";
   }
 
   const rule=serviceRouteRule(dept,sectionEl.value);
@@ -2201,7 +2234,7 @@ function renderServiceAdminTable(){
     <tr>
       <td style="padding:10px;border-bottom:1px solid var(--border)">${departmentLabel(s.department)}</td>
       <td style="padding:10px;border-bottom:1px solid var(--border)">${sectionLabel(s.section)}</td>
-      <td style="padding:10px;border-bottom:1px solid var(--border)"><b>${s.service_name}</b></td>
+      <td style="padding:10px;border-bottom:1px solid var(--border)"><b>${s.service_name}</b>${s.department==="independent" && s.ticket_prefix ? `<br><small>بادئة الرقم: ${s.ticket_prefix}</small>` : ""}</td>
       <td style="padding:10px;border-bottom:1px solid var(--border)">
         ${s.requires_college ? "كلية" : "خدمة"}
         ${s.requires_letter ? " + نطاق الحروف" : ""}
@@ -2220,11 +2253,18 @@ async function saveNewService(){
   const dept=document.getElementById("svcDept").value;
   const section=dept==="graduates" ? document.getElementById("svcSection").value : null;
   const service_name=document.getElementById("svcName").value.trim();
+  const ticket_prefix=document.getElementById("svcPrefix").value.trim();
   const sort_order=Number(document.getElementById("svcSort").value || 100);
   const msg=document.getElementById("serviceAdminMessage");
 
   if(!dept || !service_name || (dept==="graduates" && !section)){
     msg.textContent="يرجى استكمال الإدارة والقسم - عند الحاجة - واسم الخدمة.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  if(dept==="independent" && !ticket_prefix){
+    msg.textContent="يرجى تحديد بادئة رقم الانتظار للخدمة المستقلة.";
     msg.classList.remove("hidden");
     return;
   }
@@ -2241,6 +2281,7 @@ async function saveNewService(){
     service_name,
     requires_college,
     requires_letter,
+    ticket_prefix:dept==="independent" ? ticket_prefix : null,
     active:true,
     sort_order
   });
@@ -2255,6 +2296,7 @@ async function saveNewService(){
   msg.textContent="تمت إضافة الخدمة بنجاح.";
   msg.classList.remove("hidden");
   document.getElementById("svcName").value="";
+  document.getElementById("svcPrefix").value="";
   await loadServiceCatalog();
   renderServiceAdminTable();
 }
@@ -2548,7 +2590,8 @@ function departmentLabel(value){
     registration:"إدارة التسجيل",
     records:"إدارة السجلات",
     admissions:"إدارة القبول",
-    graduates:"إدارة الخريجين"
+    graduates:"إدارة الخريجين",
+    independent:"خدمة مستقلة"
   };
   return map[value] || "—";
 }
