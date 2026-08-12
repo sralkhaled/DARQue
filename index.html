@@ -137,16 +137,16 @@
     <div id="staffLogin" class="card" style="max-width:650px;margin:auto">
       <h3 class="section-title">تسجيل الدخول</h3>
       <div class="field">
-        <label>اسم الموظف</label>
-        <input id="staffName" placeholder="أدخل اسم الموظف" />
+        <label>البريد الإلكتروني</label>
+        <input id="staffEmail" type="email" dir="ltr" placeholder="name@ku.edu.kw" />
+      </div>
+      <div class="field">
+        <label>كلمة المرور</label>
+        <input id="staffPassword" type="password" placeholder="أدخل كلمة المرور" />
       </div>
       <div class="field">
         <label>رقم الكاونتر</label>
         <input id="counterNo" type="number" min="1" placeholder="مثال: 12" />
-      </div>
-      <div class="field">
-        <label>الرقم السري</label>
-        <input id="staffPin" type="password" placeholder="للنموذج التجريبي: 1234" />
       </div>
       <button class="btn primary" onclick="staffLogin()">دخول</button>
     </div>
@@ -595,26 +595,73 @@ function showIssuedTicket(t){
   refreshStaff();
 }
 
-function staffLogin(){
-  const name=document.getElementById("staffName").value.trim();
+async function staffLogin(){
+  const email=document.getElementById("staffEmail").value.trim();
+  const password=document.getElementById("staffPassword").value;
   const counter=document.getElementById("counterNo").value.trim();
-  const pin=document.getElementById("staffPin").value;
-  if(!name || !counter){ alert("يرجى إدخال اسم الموظف ورقم الكاونتر."); return; }
-  if(pin!=="1234"){ alert("الرقم السري غير صحيح في النموذج التجريبي."); return; }
-  staff={name,counter,permissions:JSON.parse(localStorage.getItem(`kuq_perm_${counter}`)||"[]")};
+
+  if(!email || !password || !counter){
+    alert("يرجى إدخال البريد الإلكتروني وكلمة المرور ورقم الكاونتر.");
+    return;
+  }
+
+  const { data:authData, error:authError } = await supabaseClient.auth.signInWithPassword({
+    email,
+    password
+  });
+
+  if(authError || !authData?.user){
+    console.error("Supabase login failed:", authError);
+    alert("تعذر تسجيل الدخول. يرجى التحقق من البريد الإلكتروني وكلمة المرور.");
+    return;
+  }
+
+  const { data:profile, error:profileError } = await supabaseClient
+    .from("profiles")
+    .select("id,username,full_name,role,department,active")
+    .eq("id",authData.user.id)
+    .single();
+
+  if(profileError || !profile){
+    console.error("Profile read failed:", profileError);
+    await supabaseClient.auth.signOut();
+    alert("لم يتم العثور على ملف المستخدم.");
+    return;
+  }
+
+  if(!profile.active){
+    await supabaseClient.auth.signOut();
+    alert("هذا الحساب موقوف. يرجى مراجعة مدير النظام.");
+    return;
+  }
+
+  staff={
+    userId:profile.id,
+    username:profile.username,
+    name:profile.full_name,
+    role:profile.role,
+    department:profile.department,
+    counter,
+    permissions:JSON.parse(localStorage.getItem(`kuq_perm_${counter}`)||"[]")
+  };
+
   document.getElementById("staffLogin").classList.add("hidden");
   document.getElementById("staffPanel").classList.remove("hidden");
-  renderPermissions(); refreshStaff();
+  renderPermissions();
+  await refreshStaff();
 }
 
-function staffLogout(){
-  staff=null; current=null;
+async function staffLogout(){
+  await supabaseClient.auth.signOut();
+  staff=null;
+  current=null;
   document.getElementById("staffPanel").classList.add("hidden");
   document.getElementById("staffLogin").classList.remove("hidden");
+  document.getElementById("staffPassword").value="";
 }
-
 function renderPermissions(){
-  document.getElementById("staffIdentity").innerHTML=`الموظف: <b>${staff.name}</b> — الكاونتر: <b>${staff.counter}</b>`;
+  const roleLabel=staff.role==="superuser" ? "مدير النظام" : "موظف";
+  document.getElementById("staffIdentity").innerHTML=`الموظف: <b>${staff.name}</b> — الصلاحية: <b>${roleLabel}</b> — الكاونتر: <b>${staff.counter}</b>`;
   document.getElementById("routeDept").value="";
   document.getElementById("routeSection").value="";
   document.getElementById("routeSectionWrap").classList.add("hidden");
