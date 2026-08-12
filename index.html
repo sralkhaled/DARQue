@@ -909,57 +909,61 @@ function selectLetter(i){
 
 async function issueTicket(){
   const cfg=currentConfig();
-  let prefix = visitorState.dept==="graduates" ? cfg.prefix : departments[visitorState.dept].prefix;
-  const seq=getSeq(); seq[prefix]=(seq[prefix]||0)+1; saveSeq(seq);
+
   let range=null;
   if(visitorState.serviceMeta?.requires_letter && visitorState.college && visitorState.letter){
     range=findGradRange(visitorState.college,visitorState.letter);
   }
 
-  const ticketNumber=`${prefix}-${String(seq[prefix]).padStart(3,"0")}`;
+  const root=document.getElementById("visitorRoot");
+  root.innerHTML=`
+    <div class="card">
+      <h2 class="section-title">جاري إصدار الرقم...</h2>
+      <p class="muted">يرجى الانتظار</p>
+    </div>`;
 
-  const dbTicket={
-    ticket_number:ticketNumber,
-    department:visitorState.dept,
-    section:visitorState.section,
-    service:visitorState.service,
-    college:visitorState.college,
-    name_letter:visitorState.letter,
-    letter_range:range,
-    status:"waiting"
-  };
-
-  const localId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random());
-  dbTicket.id = localId;
-
-  const { error } = await supabaseClient
-    .from("tickets")
-    .insert(dbTicket);
+  const { data, error } = await supabaseClient.rpc("issue_queue_ticket", {
+    p_department: visitorState.dept,
+    p_section: visitorState.section || null,
+    p_service: visitorState.service,
+    p_college: visitorState.college || null,
+    p_name_letter: visitorState.letter || null,
+    p_letter_range: range || null
+  });
 
   if(error){
-    console.error("Supabase ticket insert failed:", error);
-    alert("تعذر إصدار رقم الانتظار. يرجى المحاولة مرة أخرى.");
+    console.error("Ticket RPC failed:", error);
+    root.innerHTML=`
+      <div class="card">
+        <h2 class="section-title">تعذر إصدار الرقم</h2>
+        <p class="muted">${error.message || "يرجى المحاولة مرة أخرى."}</p>
+        <div class="actions"><button class="btn primary" onclick="visitorHome()">العودة للرئيسية</button></div>
+      </div>`;
     return;
   }
 
-  const t={
-    id:localId,
-    number:ticketNumber,
-    dept:visitorState.dept,
-    section:visitorState.section,
-    service:visitorState.service,
-    college:visitorState.college,
-    letter:visitorState.letter,
-    range,
-    status:"waiting",
-    createdAt:Date.now(),
-    counter:null
-  };
+  const ticket = Array.isArray(data) ? data[0] : data;
 
-  // Keep a local copy only so the existing prototype counter screen continues to function
-  // during this first Supabase connection test.
-  const tickets=getTickets(); tickets.push(t); saveTickets(tickets);
-  showIssuedTicket(t);
+  if(!ticket?.ticket_number){
+    console.error("Ticket RPC returned unexpected data:", data);
+    root.innerHTML=`
+      <div class="card">
+        <h2 class="section-title">تعذر إصدار الرقم</h2>
+        <p class="muted">لم يتم استلام رقم صالح من النظام.</p>
+        <div class="actions"><button class="btn primary" onclick="visitorHome()">العودة للرئيسية</button></div>
+      </div>`;
+    return;
+  }
+
+  root.innerHTML=`
+    <div class="card ticket-card">
+      <div class="muted">رقم الانتظار</div>
+      <div class="ticket-number">${ticket.ticket_number}</div>
+      <div style="margin-top:10px"><b>${visitorState.service}</b></div>
+      ${visitorState.college?`<div class="muted">${visitorState.college}</div>`:""}
+      ${range?`<div class="muted">نطاق الحروف: ${range}</div>`:""}
+      <div class="actions"><button class="btn primary" onclick="visitorHome()">إنهاء</button></div>
+    </div>`;
 }
 function showIssuedTicket(t){
   const root=document.getElementById("visitorRoot");
@@ -1050,13 +1054,16 @@ async function staffLogin(){
     role:profile.role,
     department:profile.department,
     counter,
-    permissions:centralPermissions.length
-      ? centralPermissions
-      : JSON.parse(localStorage.getItem(`kuq_perm_${counter}`)||"[]")
+    permissions:centralPermissions
   };
 
   document.getElementById("adminNavBtn").classList.toggle("hidden", profile.role!=="superuser");
   document.getElementById("superuserQuickAccess").classList.toggle("hidden", profile.role!=="superuser");
+
+  if(profile.role!=="superuser" && staff.permissions.length===0){
+    alert("لا توجد صلاحيات خدمة مركزية مرتبطة بهذا المستخدم. يرجى مراجعة مدير النظام.");
+  }
+
   document.getElementById("staffLogin").classList.add("hidden");
   document.getElementById("staffPanel").classList.remove("hidden");
   renderPermissions();
@@ -1302,7 +1309,7 @@ function savePermissions(){
   }
 
   staff.permissions=permissions;
-  localStorage.setItem(`kuq_perm_${staff.counter}`,JSON.stringify(permissions));
+  console.info("Central permissions are managed by مدير النظام; local route storage is disabled.");
   refreshStaff();
   alert("تم حفظ نطاق عمل الكاونتر.");
 }
