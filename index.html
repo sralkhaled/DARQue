@@ -178,6 +178,9 @@
         <div class="card">
           <h3 class="section-title">إعداد الكاونتر</h3>
           <div id="staffIdentity" class="notice"></div>
+          <div id="superuserQuickAccess" class="hidden" style="margin-bottom:14px">
+            <button class="btn primary" onclick="showView('admin')">مدير النظام</button>
+          </div>
           <p class="muted">حدد نطاق عمل الكاونتر بشكل هرمي. يمكن تعديل الإعدادات في أي وقت.</p>
 
           <div class="field">
@@ -268,7 +271,7 @@
           <h3 class="section-title" style="margin-bottom:4px">إدارة المستخدمين</h3>
           <div class="muted">عرض والبحث في حسابات الموظفين المسجلة بالنظام</div>
         </div>
-        <button class="btn primary" onclick="adminAddUserPlaceholder()">+ إضافة مستخدم</button>
+        <button class="btn primary" onclick="openAddUserForm()">+ إضافة مستخدم</button>
       </div>
 
       <div class="grid" style="grid-template-columns:2fr 1fr 1fr 1fr;margin-bottom:16px">
@@ -305,6 +308,64 @@
       </div>
 
       <div id="adminUsersStatus" class="notice hidden"></div>
+
+      <div id="addUserPanel" class="card hidden" style="box-shadow:none;margin:0 0 18px;padding:18px;background:#f8fafc">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+          <div>
+            <h4 style="margin:0 0 4px">إضافة مستخدم جديد</h4>
+            <div class="muted">إنشاء حساب موظف جديد وتحديد بياناته الأساسية</div>
+          </div>
+          <button class="btn" onclick="closeAddUserForm()">إلغاء</button>
+        </div>
+
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+          <div class="field">
+            <label>اسم الموظف</label>
+            <input id="newStaffFullName" placeholder="الاسم الكامل" />
+          </div>
+
+          <div class="field">
+            <label>اسم المستخدم</label>
+            <input id="newStaffUsername" dir="ltr" placeholder="مثال: a.alkhaldi" />
+          </div>
+
+          <div class="field">
+            <label>البريد الإلكتروني</label>
+            <input id="newStaffEmail" type="email" dir="ltr" placeholder="name@ku.edu.kw" />
+          </div>
+
+          <div class="field">
+            <label>كلمة المرور المؤقتة</label>
+            <input id="newStaffPassword" type="password" placeholder="8 أحرف على الأقل" />
+          </div>
+
+          <div class="field">
+            <label>الصلاحية</label>
+            <select id="newStaffRole" onchange="updateNewUserDepartmentState()">
+              <option value="staff">موظف</option>
+              <option value="superuser">مدير النظام</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>الإدارة</label>
+            <select id="newStaffDepartment">
+              <option value="">اختر الإدارة</option>
+              <option value="registration">إدارة التسجيل</option>
+              <option value="records">إدارة السجلات</option>
+              <option value="admissions">إدارة القبول</option>
+              <option value="graduates">إدارة الخريجين</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="addUserMessage" class="notice hidden"></div>
+
+        <div class="actions">
+          <button id="createStaffBtn" class="btn primary" onclick="createStaffUser()">إنشاء المستخدم</button>
+          <button class="btn" onclick="closeAddUserForm()">إلغاء</button>
+        </div>
+      </div>
 
       <div style="overflow:auto">
         <table style="width:100%;border-collapse:collapse;min-width:760px">
@@ -741,6 +802,7 @@ async function staffLogin(){
   };
 
   document.getElementById("adminNavBtn").classList.toggle("hidden", profile.role!=="superuser");
+  document.getElementById("superuserQuickAccess").classList.toggle("hidden", profile.role!=="superuser");
   document.getElementById("staffLogin").classList.add("hidden");
   document.getElementById("staffPanel").classList.remove("hidden");
   renderPermissions();
@@ -752,6 +814,7 @@ async function staffLogout(){
   staff=null;
   current=null;
   document.getElementById("adminNavBtn").classList.add("hidden");
+  document.getElementById("superuserQuickAccess").classList.add("hidden");
   document.getElementById("staffPanel").classList.add("hidden");
   document.getElementById("staffLogin").classList.remove("hidden");
   document.getElementById("staffPassword").value="";
@@ -1312,8 +1375,118 @@ function renderAdminUsers(){
   `).join("");
 }
 
-function adminAddUserPlaceholder(){
-  alert("سيتم تفعيل إضافة المستخدم في الخطوة التالية بعد إعداد إنشاء الحسابات الآمن.");
+function openAddUserForm(){
+  if(!staff || staff.role!=="superuser"){
+    alert("هذه الخاصية متاحة لمدير النظام فقط.");
+    return;
+  }
+
+  document.getElementById("addUserPanel").classList.remove("hidden");
+  document.getElementById("addUserMessage").classList.add("hidden");
+  document.getElementById("newStaffFullName").focus();
+}
+
+function closeAddUserForm(){
+  document.getElementById("addUserPanel").classList.add("hidden");
+  document.getElementById("addUserMessage").classList.add("hidden");
+}
+
+function updateNewUserDepartmentState(){
+  const role=document.getElementById("newStaffRole").value;
+  const dept=document.getElementById("newStaffDepartment");
+
+  if(role==="superuser"){
+    dept.value="";
+  }
+}
+
+async function createStaffUser(){
+  if(!staff || staff.role!=="superuser"){
+    alert("هذه الخاصية متاحة لمدير النظام فقط.");
+    return;
+  }
+
+  const full_name=document.getElementById("newStaffFullName").value.trim();
+  const username=document.getElementById("newStaffUsername").value.trim();
+  const email=document.getElementById("newStaffEmail").value.trim();
+  const password=document.getElementById("newStaffPassword").value;
+  const role=document.getElementById("newStaffRole").value;
+  const department=document.getElementById("newStaffDepartment").value || null;
+
+  const msg=document.getElementById("addUserMessage");
+  const btn=document.getElementById("createStaffBtn");
+
+  if(!full_name || !username || !email || !password){
+    msg.textContent="يرجى استكمال جميع البيانات المطلوبة.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  if(password.length < 8){
+    msg.textContent="يجب ألا تقل كلمة المرور عن 8 أحرف.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  if(role==="staff" && !department){
+    msg.textContent="يرجى تحديد الإدارة للموظف.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  btn.disabled=true;
+  btn.textContent="جاري الإنشاء...";
+  msg.classList.add("hidden");
+
+  try{
+    const { data, error } = await supabaseClient.functions.invoke("create-staff-user", {
+      body:{
+        email,
+        password,
+        username,
+        full_name,
+        role,
+        department
+      }
+    });
+
+    if(error){
+      console.error("Create staff function failed:", error);
+      msg.textContent=`تعذر إنشاء المستخدم: ${error.message || "حدث خطأ غير متوقع."}`;
+      msg.classList.remove("hidden");
+      return;
+    }
+
+    if(data?.error){
+      msg.textContent=`تعذر إنشاء المستخدم: ${data.error}`;
+      msg.classList.remove("hidden");
+      return;
+    }
+
+    msg.textContent="تم إنشاء المستخدم بنجاح.";
+    msg.classList.remove("hidden");
+
+    document.getElementById("newStaffFullName").value="";
+    document.getElementById("newStaffUsername").value="";
+    document.getElementById("newStaffEmail").value="";
+    document.getElementById("newStaffPassword").value="";
+    document.getElementById("newStaffRole").value="staff";
+    document.getElementById("newStaffDepartment").value="";
+
+    await loadAdminUsers();
+
+    setTimeout(()=>{
+      closeAddUserForm();
+    },1000);
+
+  }catch(err){
+    console.error(err);
+    msg.textContent="تعذر إنشاء المستخدم. يرجى المحاولة مرة أخرى.";
+    msg.classList.remove("hidden");
+  }finally{
+    btn.disabled=false;
+    btn.textContent="إنشاء المستخدم";
+  }
 }
 
 async function saveNewPassword(){
