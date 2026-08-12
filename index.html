@@ -246,6 +246,7 @@
           <div class="muted">عرض والبحث في حسابات الموظفين المسجلة بالنظام</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" onclick="openDepartmentManagement()">إدارة الإدارات</button>
           <button class="btn" onclick="openHallManagement()">إدارة القاعات</button>
           <button class="btn" onclick="openDisplayManagement()">إدارة شاشات النداء</button>
           <button class="btn" onclick="openServiceManagement()">إدارة الخدمات</button>
@@ -343,6 +344,50 @@
         <div class="actions">
           <button id="createStaffBtn" class="btn primary" onclick="createStaffUser()">إنشاء المستخدم</button>
           <button class="btn" onclick="closeAddUserForm()">إلغاء</button>
+        </div>
+      </div>
+
+      <div id="departmentManagementPanel" class="card hidden" style="box-shadow:none;margin:0 0 18px;padding:18px;background:#f8fafc">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+          <div>
+            <h4 style="margin:0 0 4px">إدارة الإدارات</h4>
+            <div class="muted">إضافة إدارة جديدة وربطها تلقائياً بالمستخدمين والخدمات والصلاحيات وشاشات النداء</div>
+          </div>
+          <button class="btn" onclick="closeDepartmentManagement()">إغلاق</button>
+        </div>
+
+        <div class="grid" style="grid-template-columns:2fr 1fr 1fr;gap:12px">
+          <div class="field">
+            <label>اسم الإدارة</label>
+            <input id="newDeptName" placeholder="مثال: مكتب العميد" />
+          </div>
+          <div class="field">
+            <label>بادئة رقم الانتظار</label>
+            <input id="newDeptPrefix" maxlength="3" placeholder="مثال: ع" />
+          </div>
+          <div class="field">
+            <label>ترتيب العرض</label>
+            <input id="newDeptSort" type="number" value="100" min="0" />
+          </div>
+        </div>
+
+        <div id="departmentAdminMessage" class="notice hidden"></div>
+        <div class="actions">
+          <button class="btn primary" onclick="saveDepartment()">إضافة الإدارة</button>
+        </div>
+
+        <div style="overflow:auto;margin-top:18px">
+          <table style="width:100%;border-collapse:collapse;min-width:680px">
+            <thead>
+              <tr>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">الإدارة</th>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">بادئة الرقم</th>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">الحالة</th>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">إجراء</th>
+              </tr>
+            </thead>
+            <tbody id="departmentAdminTable"></tbody>
+          </table>
         </div>
       </div>
 
@@ -806,6 +851,7 @@ const gradRanges = {
 
 let visitorState = {dept:null, section:null, service:null, college:null, letter:null, serviceMeta:null};
 let serviceCatalog = [];
+let departmentCatalog = [];
 let halls = [];
 let displayConfigs = [];
 let activeDisplaySlug = null;
@@ -876,12 +922,11 @@ function visitorHome(){
       <p>يرجى اختيار الإدارة المطلوبة للحصول على رقم الانتظار</p>
     </div>
     <div class="grid">
-      ${[
-        ["registration","إدارة التسجيل","خدمات التسجيل والمقررات"],
-        ["records","إدارة السجلات","خدمات السجلات والمعاملات الأكاديمية"],
-        ["admissions","إدارة القبول","خدمات القبول والتقديم"],
-        ["graduates","إدارة الخريجين","الاستقبال ونشاط الخريج وشؤون التخرج"]
-      ].map(x=>`<div class="card choice" onclick="chooseDept('${x[0]}')"><strong>${x[1]}</strong><span>${x[2]}</span></div>`).join("")}
+      ${departmentCatalog.filter(d=>d.active && d.slug!=="independent").map(d=>`
+        <div class="card choice" onclick="chooseDept('${d.slug}')">
+          <strong>${d.name}</strong>
+          <span>${d.slug==="graduates"?"اختر القسم ثم الخدمة":"اختر الخدمة"}</span>
+        </div>`).join("")}
       ${catalogServices("independent").map((s,i)=>`<div class="card choice" onclick="chooseIndependentService(${i})"><strong>${s.service_name}</strong><span>خدمة مستقلة</span></div>`).join("")}
     </div>`;
 }
@@ -928,7 +973,10 @@ function chooseGradSection(s){ visitorState.section=s; renderServices(); }
 function currentConfig(){
   if(visitorState.dept==="independent") return {name:"خدمة مستقلة",services:[]};
   if(visitorState.dept==="graduates") return departments.graduates.sections[visitorState.section];
-  return departments[visitorState.dept];
+  if(departments[visitorState.dept]) return departments[visitorState.dept];
+
+  const d=customDepartment(visitorState.dept);
+  return d ? {name:d.name,services:catalogServices(d.slug)} : null;
 }
 
 function catalogServices(dept, section=null, includeInactive=false){
@@ -940,8 +988,10 @@ function catalogServices(dept, section=null, includeInactive=false){
 
   if(rows.length) return rows;
 
-  // Independent services exist only in the central catalog.
+  // Independent and bespoke administrations exist only in the central catalog.
   if(dept==="independent") return [];
+  const dynamicDept=customDepartment(dept);
+  if(dynamicDept && !dynamicDept.built_in) return [];
 
   // Safe fallback to original embedded catalog.
   if(dept==="graduates"){
@@ -1325,8 +1375,8 @@ function permissionKeyLabel(key){
   else if(dept==="records") labels.push("إدارة السجلات");
   else if(dept==="admissions") labels.push("إدارة القبول");
   else if(dept==="graduates") labels.push("إدارة الخريجين");
-  else if(dept==="independent") labels.push("خدمة مستقلة");
-  else labels.push(dept);
+  else if(dept==="independent") labels.push("خدمات مستقلة");
+  else labels.push(departmentLabel(dept));
 
   if(dept==="graduates" && parts[i]){
     labels.push(sectionLabel(parts[i]));
@@ -1879,6 +1929,129 @@ setInterval(()=>{
   if(staff) refreshStaff();
 },2000);
 
+async function loadDepartmentCatalog(){
+  const {data,error}=await supabaseClient
+    .from("department_catalog")
+    .select("id,slug,name,ticket_prefix,built_in,active,sort_order")
+    .order("sort_order",{ascending:true});
+
+  if(error){
+    console.error("Department catalog load failed:",error);
+    return false;
+  }
+
+  departmentCatalog=data || [];
+  populateDepartmentSelects();
+  return true;
+}
+
+function departmentOptions(firstLabel="اختر الإدارة"){
+  return `<option value="">${firstLabel}</option>` +
+    departmentCatalog.filter(d=>d.active).map(d=>`<option value="${d.slug}">${d.name}</option>`).join("");
+}
+
+function populateDepartmentSelects(){
+  const ids=["newStaffDepartment","editStaffDepartment","svcDept","permDept","displayDept"];
+  ids.forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    const current=el.value;
+    el.innerHTML=departmentOptions();
+    if([...el.options].some(o=>o.value===current)) el.value=current;
+  });
+
+  const filter=document.getElementById("adminDeptFilter");
+  if(filter){
+    const current=filter.value;
+    filter.innerHTML=departmentOptions("الكل");
+    if([...filter.options].some(o=>o.value===current)) filter.value=current;
+  }
+}
+
+function customDepartment(slug){
+  return departmentCatalog.find(d=>d.slug===slug) || null;
+}
+
+async function openDepartmentManagement(){
+  hideAdminSubpanels("departmentManagementPanel");
+  document.getElementById("departmentManagementPanel").classList.remove("hidden");
+  await loadDepartmentCatalog();
+  renderDepartmentAdminTable();
+  document.getElementById("departmentManagementPanel").scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+function closeDepartmentManagement(){
+  document.getElementById("departmentManagementPanel").classList.add("hidden");
+}
+
+function makeDepartmentSlug(name){
+  const ascii=String(name||"").trim().toLowerCase()
+    .replace(/\s+/g,"-")
+    .replace(/[^a-z0-9_-]/g,"");
+  return ascii || ("dept-" + Date.now().toString(36));
+}
+
+async function saveDepartment(){
+  const name=document.getElementById("newDeptName").value.trim();
+  const ticket_prefix=document.getElementById("newDeptPrefix").value.trim();
+  const sort_order=Number(document.getElementById("newDeptSort").value || 100);
+  const msg=document.getElementById("departmentAdminMessage");
+
+  if(!name || !ticket_prefix){
+    msg.textContent="يرجى إدخال اسم الإدارة وبادئة رقم الانتظار.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  const {error}=await supabaseClient.from("department_catalog").insert({
+    slug:makeDepartmentSlug(name),
+    name,
+    ticket_prefix,
+    built_in:false,
+    active:true,
+    sort_order
+  });
+
+  if(error){
+    msg.textContent=error.code==="23505" ? "اسم الإدارة مستخدم مسبقاً." : `تعذر إضافة الإدارة: ${error.message}`;
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  msg.textContent="تمت إضافة الإدارة بنجاح.";
+  msg.classList.remove("hidden");
+  document.getElementById("newDeptName").value="";
+  document.getElementById("newDeptPrefix").value="";
+  await loadDepartmentCatalog();
+  renderDepartmentAdminTable();
+  visitorHome();
+}
+
+function renderDepartmentAdminTable(){
+  const body=document.getElementById("departmentAdminTable");
+  body.innerHTML=departmentCatalog.map(d=>`
+    <tr>
+      <td style="padding:10px;border-bottom:1px solid var(--border)"><b>${d.name}</b>${d.built_in?' <small class="muted">(أساسية)</small>':""}</td>
+      <td style="padding:10px;border-bottom:1px solid var(--border)">${d.ticket_prefix || "—"}</td>
+      <td style="padding:10px;border-bottom:1px solid var(--border)"><span class="tag">${d.active?"نشطة":"موقوفة"}</span></td>
+      <td style="padding:10px;border-bottom:1px solid var(--border)">
+        ${d.built_in ? "—" : `<button class="btn" style="padding:7px 10px" onclick="toggleDepartment(${d.id},${d.active?"false":"true"})">${d.active?"إيقاف":"تفعيل"}</button>`}
+      </td>
+    </tr>
+  `).join("");
+}
+
+async function toggleDepartment(id,active){
+  const {error}=await supabaseClient.from("department_catalog").update({active}).eq("id",id);
+  if(error){
+    alert(`تعذر تحديث الإدارة: ${error.message}`);
+    return;
+  }
+  await loadDepartmentCatalog();
+  renderDepartmentAdminTable();
+  visitorHome();
+}
+
 async function loadHallsAndDisplays(){
   const [{data:hallData,error:hallError},{data:displayData,error:displayError}] = await Promise.all([
     supabaseClient.from("halls").select("id,name,slug,active,sort_order").order("sort_order",{ascending:true}),
@@ -1909,7 +2082,7 @@ function populateHallSelects(){
 }
 
 function hideAdminSubpanels(exceptId){
-  ["hallManagementPanel","displayManagementPanel","serviceManagementPanel","userPermissionsPanel","manageUserPanel","addUserPanel"].forEach(id=>{
+  ["departmentManagementPanel","hallManagementPanel","displayManagementPanel","serviceManagementPanel","userPermissionsPanel","manageUserPanel","addUserPanel"].forEach(id=>{
     if(id!==exceptId) document.getElementById(id)?.classList.add("hidden");
   });
 }
@@ -2020,6 +2193,7 @@ async function toggleHall(id,active){
 }
 
 async function openDisplayManagement(){
+  await loadDepartmentCatalog();
   hideAdminSubpanels("displayManagementPanel");
   document.getElementById("displayManagementPanel").classList.remove("hidden");
   await loadHallsAndDisplays();
@@ -2223,12 +2397,15 @@ function sectionLabel(value){
 function serviceRouteRule(dept,section){
   if(dept==="registration" || dept==="admissions" || dept==="independent") return {college:false,letter:false,locked:true};
   if(dept==="records") return {college:null,letter:false,locked:false};
+  const dynamicDept=customDepartment(dept);
+  if(dynamicDept && !dynamicDept.built_in) return {college:false,letter:false,locked:true};
   if(dept==="graduates" && section==="reception") return {college:false,letter:false,locked:true};
   if(dept==="graduates" && ["activity","graduation"].includes(section)) return {college:true,letter:true,locked:true};
   return {college:false,letter:false,locked:true};
 }
 
 async function openServiceManagement(){
+  await loadDepartmentCatalog();
   hideAdminSubpanels("serviceManagementPanel");
   document.getElementById("serviceManagementPanel").classList.remove("hidden");
   await loadServiceCatalog();
@@ -2376,6 +2553,7 @@ async function toggleServiceActive(id,newActive){
 }
 
 async function openUserPermissions(id){
+  await loadDepartmentCatalog();
   const u=getAdminUserById(id);
   if(!u) return;
 
@@ -2645,14 +2823,17 @@ async function clearAllUserPermissions(){
 let adminUsers=[];
 
 function departmentLabel(value){
+  const dynamic=departmentCatalog.find(d=>d.slug===value);
+  if(dynamic) return dynamic.name;
+
   const map={
     registration:"إدارة التسجيل",
     records:"إدارة السجلات",
     admissions:"إدارة القبول",
     graduates:"إدارة الخريجين",
-    independent:"خدمة مستقلة"
+    independent:"خدمات مستقلة"
   };
-  return map[value] || "—";
+  return map[value] || value || "—";
 }
 
 async function loadAdminUsers(){
@@ -3147,6 +3328,7 @@ async function handleRecoveryMode(){
 (async ()=>{
   const recovery=await handleRecoveryMode();
   if(!recovery){
+    await loadDepartmentCatalog();
     await Promise.all([loadServiceCatalog(),loadHallsAndDisplays()]);
     const displayMode=await applyDisplayUrl();
     if(!displayMode){
