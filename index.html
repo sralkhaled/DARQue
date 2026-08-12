@@ -1203,7 +1203,16 @@ async function staffLogin(){
     return;
   }
 
-  if(!counterRow || !counterRow.active || !counterRow.hall_id || !counterRow.halls?.active){
+  const hasActiveHall =
+    !!counterRow &&
+    counterRow.active === true &&
+    !!counterRow.hall_id &&
+    counterRow.halls?.active === true;
+
+  // Normal staff must work from a counter assigned to an active hall.
+  // Superusers are allowed to sign in without a hall so they can reach
+  // مدير النظام → إدارة القاعات and configure the system.
+  if(profile.role!=="superuser" && !hasActiveHall){
     await supabaseClient.auth.signOut();
     alert("هذا الكاونتر غير معين إلى قاعة نشطة. يرجى مراجعة مدير النظام.");
     return;
@@ -1216,9 +1225,9 @@ async function staffLogin(){
     role:profile.role,
     department:profile.department,
     counter,
-    hallId:counterRow.hall_id,
-    hallName:counterRow.halls?.name || "",
-    hallSlug:counterRow.halls?.slug || "",
+    hallId:hasActiveHall ? counterRow.hall_id : null,
+    hallName:hasActiveHall ? (counterRow.halls?.name || "") : "غير معين",
+    hallSlug:hasActiveHall ? (counterRow.halls?.slug || "") : "",
     permissions:centralPermissions
   };
 
@@ -1564,6 +1573,10 @@ function renderCurrent(){
 }
 
 async function callNext(){
+  if(!staff?.hallId){
+    alert("يجب تعيين هذا الكاونتر إلى قاعة نشطة قبل نداء أي رقم.");
+    return;
+  }
   if(!staff) return;
   if(current){
     alert("يرجى إنهاء الدور الحالي أولاً.");
