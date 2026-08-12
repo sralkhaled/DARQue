@@ -1452,13 +1452,62 @@ async function createStaffUser(){
 
     if(error){
       console.error("Create staff function failed:", error);
-      msg.textContent=`تعذر إنشاء المستخدم: ${error.message || "حدث خطأ غير متوقع."}`;
+
+      let detailedMessage="حدث خطأ غير متوقع.";
+
+      try{
+        if(error.context && typeof error.context.json==="function"){
+          const body=await error.context.json();
+          if(body?.error) detailedMessage=body.error;
+          else if(body?.message) detailedMessage=body.message;
+        }else if(error.message){
+          detailedMessage=error.message;
+        }
+      }catch(parseError){
+        console.error("Could not parse Edge Function error body:", parseError);
+        if(error.message) detailedMessage=error.message;
+      }
+
+      const normalized=detailedMessage.toLowerCase();
+
+      if(
+        normalized.includes("already been registered") ||
+        normalized.includes("already registered") ||
+        normalized.includes("user already exists") ||
+        normalized.includes("email address has already")
+      ){
+        detailedMessage="البريد الإلكتروني مستخدم مسبقاً.";
+      }else if(
+        normalized.includes("password") &&
+        (normalized.includes("short") || normalized.includes("least"))
+      ){
+        detailedMessage="كلمة المرور لا تستوفي الحد الأدنى المطلوب.";
+      }else if(
+        normalized.includes("invalid email")
+      ){
+        detailedMessage="البريد الإلكتروني غير صحيح.";
+      }
+
+      msg.textContent=`تعذر إنشاء المستخدم: ${detailedMessage}`;
       msg.classList.remove("hidden");
       return;
     }
 
     if(data?.error){
-      msg.textContent=`تعذر إنشاء المستخدم: ${data.error}`;
+      let detailedMessage=data.error;
+
+      const normalized=String(detailedMessage).toLowerCase();
+
+      if(
+        normalized.includes("already been registered") ||
+        normalized.includes("already registered") ||
+        normalized.includes("user already exists") ||
+        normalized.includes("email address has already")
+      ){
+        detailedMessage="البريد الإلكتروني مستخدم مسبقاً.";
+      }
+
+      msg.textContent=`تعذر إنشاء المستخدم: ${detailedMessage}`;
       msg.classList.remove("hidden");
       return;
     }
