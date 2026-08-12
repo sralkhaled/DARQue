@@ -989,11 +989,7 @@ async function pushCall(t){
     console.error("Supabase call history insert failed:", error);
   }
 
-  // Keep local display history for this browser until the public display
-  // is connected to Supabase in the next stage.
-  let calls=getCalls();
-  calls.push({number:t.number,counter:staff.counter,time:Date.now()});
-  saveCalls(calls);
+
 }
 
 async function recall(){
@@ -1054,23 +1050,45 @@ async function markNoShow(){
   await refreshStaff();
   renderDisplay();
 }
-function renderDisplay(){
-  const calls=getCalls();
-  const latest=calls[calls.length-1];
+async function renderDisplay(){
+  const { data, error } = await supabaseClient
+    .from("calls")
+    .select("ticket_number,counter_number,called_at")
+    .order("called_at",{ascending:false})
+    .limit(8);
+
   const latestBox=document.getElementById("latestCall");
+  const historyBox=document.getElementById("callHistory");
+
+  if(error){
+    console.error("Supabase display read failed:", error);
+    latestBox.innerHTML=`<div class="call-card" style="grid-column:1/-1"><div class="muted">تعذر تحديث شاشة النداء</div></div>`;
+    historyBox.innerHTML="";
+    return;
+  }
+
+  const calls=data || [];
+  const latest=calls[0];
+
   if(!latest){
     latestBox.innerHTML=`<div class="call-card" style="grid-column:1/-1"><div class="muted">بانتظار أول نداء</div></div>`;
   } else {
     latestBox.innerHTML=`
-      <div class="call-card"><div class="muted">رقم الانتظار</div><div class="n">${latest.number}</div></div>
-      <div class="call-card"><div class="muted">يرجى التوجه إلى</div><div class="c">كاونتر ${latest.counter}</div></div>`;
+      <div class="call-card"><div class="muted">رقم الانتظار</div><div class="n">${latest.ticket_number}</div></div>
+      <div class="call-card"><div class="muted">يرجى التوجه إلى</div><div class="c">كاونتر ${latest.counter_number}</div></div>`;
   }
-  document.getElementById("callHistory").innerHTML=calls.slice(-8,-1).reverse().map(c=>`
-    <div class="hist"><b style="font-size:26px">${c.number}</b><div>كاونتر ${c.counter}</div></div>`).join("");
+
+  historyBox.innerHTML=calls.slice(1).map(c=>`
+    <div class="hist"><b style="font-size:26px">${c.ticket_number}</b><div>كاونتر ${c.counter_number}</div></div>`).join("");
 }
 
-// Keep display synced across browser tabs/windows on same machine/origin
-window.addEventListener("storage",()=>{ if(document.getElementById("display").classList.contains("active")) renderDisplay(); if(staff) refreshStaff(); });
+// Keep the shared queue/display fresh across separate devices.
+window.addEventListener("storage",()=>{ if(staff) refreshStaff(); });
+
+setInterval(()=>{
+  if(document.getElementById("display").classList.contains("active")) renderDisplay();
+  if(staff) refreshStaff();
+},2000);
 
 visitorHome();
 renderDisplay();
