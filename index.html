@@ -160,7 +160,7 @@
       <h3 class="section-title">تسجيل الدخول</h3>
       <div class="field">
         <label>البريد الإلكتروني</label>
-        <input id="staffEmail" type="email" dir="ltr" placeholder="saud.alkhaled@ku.edu.kw" />
+        <input id="staffEmail" type="email" dir="ltr" placeholder="name@ku.edu.kw" />
       </div>
       <div class="field">
         <label>كلمة المرور</label>
@@ -272,6 +272,8 @@
           <div class="muted">عرض والبحث في حسابات الموظفين المسجلة بالنظام</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" onclick="openHallManagement()">إدارة القاعات</button>
+          <button class="btn" onclick="openDisplayManagement()">إدارة شاشات النداء</button>
           <button class="btn" onclick="openServiceManagement()">إدارة الخدمات</button>
           <button class="btn primary" onclick="openAddUserForm()">+ إضافة مستخدم</button>
         </div>
@@ -334,7 +336,7 @@
 
           <div class="field">
             <label>البريد الإلكتروني</label>
-            <input id="newStaffEmail" type="email" dir="ltr" placeholder="saud.alkhaled@ku.edu.kw" />
+            <input id="newStaffEmail" type="email" dir="ltr" placeholder="name@ku.edu.kw" />
           </div>
 
           <div class="field">
@@ -367,6 +369,140 @@
         <div class="actions">
           <button id="createStaffBtn" class="btn primary" onclick="createStaffUser()">إنشاء المستخدم</button>
           <button class="btn" onclick="closeAddUserForm()">إلغاء</button>
+        </div>
+      </div>
+
+      <div id="hallManagementPanel" class="card hidden" style="box-shadow:none;margin:0 0 18px;padding:18px;background:#f8fafc">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+          <div>
+            <h4 style="margin:0 0 4px">إدارة القاعات</h4>
+            <div class="muted">إنشاء القاعات وتعيين الكاونترات لكل قاعة</div>
+          </div>
+          <button class="btn" onclick="closeHallManagement()">إغلاق</button>
+        </div>
+
+        <div class="grid" style="grid-template-columns:2fr 1.3fr 1fr;gap:12px">
+          <div class="field">
+            <label>اسم القاعة</label>
+            <input id="hallName" placeholder="مثال: Hall1 أو صالة القبول" />
+          </div>
+          <div class="field">
+            <label>رمز القاعة</label>
+            <input id="hallSlug" dir="ltr" placeholder="hall1" />
+          </div>
+          <div class="field">
+            <label>ترتيب العرض</label>
+            <input id="hallSort" type="number" value="100" min="0" />
+          </div>
+        </div>
+
+        <div id="hallAdminMessage" class="notice hidden"></div>
+        <div class="actions">
+          <button class="btn primary" onclick="saveHall()">إضافة القاعة</button>
+        </div>
+
+        <h4 style="margin:20px 0 8px">تعيين كاونتر إلى قاعة</h4>
+        <div class="grid" style="grid-template-columns:1fr 2fr;gap:12px">
+          <div class="field">
+            <label>رقم الكاونتر</label>
+            <input id="hallCounterNo" type="number" min="1" placeholder="مثال: 12" />
+          </div>
+          <div class="field">
+            <label>القاعة</label>
+            <select id="hallCounterHall"></select>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn primary" onclick="assignCounterToHall()">حفظ تعيين الكاونتر</button>
+        </div>
+
+        <div style="overflow:auto;margin-top:18px">
+          <table style="width:100%;border-collapse:collapse;min-width:720px">
+            <thead>
+              <tr>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">القاعة</th>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">الرابط/الرمز</th>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">الكاونترات</th>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">الحالة</th>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">إجراء</th>
+              </tr>
+            </thead>
+            <tbody id="hallAdminTable"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="displayManagementPanel" class="card hidden" style="box-shadow:none;margin:0 0 18px;padding:18px;background:#f8fafc">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+          <div>
+            <h4 style="margin:0 0 4px">إدارة شاشات النداء</h4>
+            <div class="muted">حدد بالضبط النداءات التي تظهر على كل شاشة فعلية</div>
+          </div>
+          <button class="btn" onclick="closeDisplayManagement()">إغلاق</button>
+        </div>
+
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px">
+          <div class="field">
+            <label>اسم الشاشة</label>
+            <input id="displayName" placeholder="مثال: شاشة Hall1" />
+          </div>
+          <div class="field">
+            <label>رمز الشاشة</label>
+            <input id="displaySlug" dir="ltr" placeholder="hall1-screen" />
+          </div>
+          <div class="field">
+            <label>القاعة</label>
+            <select id="displayHall">
+              <option value="">جميع القاعات / غير محدد</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>الإدارة</label>
+            <select id="displayDept" onchange="displayDeptChanged()">
+              <option value="">جميع الإدارات / غير محدد</option>
+              <option value="registration">إدارة التسجيل</option>
+              <option value="records">إدارة السجلات</option>
+              <option value="admissions">إدارة القبول</option>
+              <option value="graduates">إدارة الخريجين</option>
+            </select>
+          </div>
+          <div class="field hidden" id="displaySectionWrap">
+            <label>القسم</label>
+            <select id="displaySection">
+              <option value="">جميع أقسام الخريجين</option>
+              <option value="reception">قسم الاستقبال</option>
+              <option value="activity">قسم نشاط الخريج</option>
+              <option value="graduation">قسم شؤون التخرج</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>كاونترات محددة (اختياري)</label>
+            <input id="displayCounters" dir="ltr" placeholder="1,2,3,4" />
+          </div>
+        </div>
+
+        <div class="notice" style="margin-top:8px">
+          يمكن تحديد القاعة فقط، أو الإدارة فقط، أو القسم، أو كاونترات محددة، أو الجمع بينها.
+        </div>
+        <div id="displayAdminMessage" class="notice hidden"></div>
+        <div class="actions">
+          <button class="btn primary" onclick="saveDisplayConfig()">إضافة شاشة النداء</button>
+        </div>
+
+        <div style="overflow:auto;margin-top:18px">
+          <table style="width:100%;border-collapse:collapse;min-width:920px">
+            <thead>
+              <tr>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">اسم الشاشة</th>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">القاعة</th>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">الإدارة / القسم</th>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">الكاونترات</th>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">الحالة</th>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">إجراء</th>
+              </tr>
+            </thead>
+            <tbody id="displayAdminTable"></tbody>
+          </table>
         </div>
       </div>
 
@@ -571,7 +707,11 @@
   <!-- DISPLAY -->
   <section id="display" class="view">
     <div class="display-board">
-      <h2>الرجاء متابعة رقم الانتظار والكاونتر</h2>
+      <div id="displayControlBar" style="max-width:900px;margin:0 auto 18px">
+        <label style="display:block;margin-bottom:6px">شاشة النداء</label>
+        <select id="publicDisplaySelector" onchange="selectPublicDisplay(this.value)" style="width:100%;padding:10px;border-radius:10px"></select>
+      </div>
+      <h2 id="publicDisplayTitle">الرجاء متابعة رقم الانتظار والكاونتر</h2>
       <div id="latestCall" class="called"></div>
       <div id="callHistory" class="history"></div>
     </div>
@@ -666,6 +806,9 @@ const gradRanges = {
 
 let visitorState = {dept:null, section:null, service:null, college:null, letter:null, serviceMeta:null};
 let serviceCatalog = [];
+let halls = [];
+let displayConfigs = [];
+let activeDisplaySlug = null;
 let selectedPermissionUser = null;
 let staff = null;
 let current = null;
@@ -1047,6 +1190,25 @@ async function staffLogin(){
     }).filter(Boolean);
   }
 
+  const { data:counterRow, error:counterError } = await supabaseClient
+    .from("counters")
+    .select("counter_number,active,hall_id,halls(name,slug,active)")
+    .eq("counter_number",Number(counter))
+    .maybeSingle();
+
+  if(counterError){
+    console.error("Counter assignment read failed:",counterError);
+    await supabaseClient.auth.signOut();
+    alert("تعذر التحقق من تعيين الكاونتر.");
+    return;
+  }
+
+  if(!counterRow || !counterRow.active || !counterRow.hall_id || !counterRow.halls?.active){
+    await supabaseClient.auth.signOut();
+    alert("هذا الكاونتر غير معين إلى قاعة نشطة. يرجى مراجعة مدير النظام.");
+    return;
+  }
+
   staff={
     userId:profile.id,
     username:profile.username,
@@ -1054,6 +1216,9 @@ async function staffLogin(){
     role:profile.role,
     department:profile.department,
     counter,
+    hallId:counterRow.hall_id,
+    hallName:counterRow.halls?.name || "",
+    hallSlug:counterRow.halls?.slug || "",
     permissions:centralPermissions
   };
 
@@ -1083,7 +1248,7 @@ async function staffLogout(){
 }
 function renderPermissions(){
   const roleLabel=staff.role==="superuser" ? "مدير النظام" : "موظف";
-  document.getElementById("staffIdentity").innerHTML=`الموظف: <b>${staff.name}</b> — الصلاحية: <b>${roleLabel}</b> — الكاونتر: <b>${staff.counter}</b>`;
+  document.getElementById("staffIdentity").innerHTML=`الموظف: <b>${staff.name}</b> — الصلاحية: <b>${roleLabel}</b> — القاعة: <b>${staff.hallName}</b> — الكاونتر: <b>${staff.counter}</b>`;
   document.getElementById("routeDept").value="";
   document.getElementById("routeSection").value="";
   document.getElementById("routeSectionWrap").classList.add("hidden");
@@ -1451,7 +1616,8 @@ async function pushCall(t){
     .insert({
       ticket_id:t.id,
       ticket_number:t.number,
-      counter_number:Number(staff.counter)
+      counter_number:Number(staff.counter),
+      hall_id:staff.hallId
     });
 
   if(error){
@@ -1520,14 +1686,34 @@ async function markNoShow(){
   renderDisplay();
 }
 async function renderDisplay(){
-  const { data, error } = await supabaseClient
-    .from("calls")
-    .select("ticket_number,counter_number,called_at")
-    .order("called_at",{ascending:false})
-    .limit(8);
-
+  const selector=document.getElementById("publicDisplaySelector");
+  const title=document.getElementById("publicDisplayTitle");
   const latestBox=document.getElementById("latestCall");
   const historyBox=document.getElementById("callHistory");
+
+  if(!displayConfigs.length){
+    await loadHallsAndDisplays();
+  }
+
+  const cfg=displayConfigs.find(x=>x.slug===activeDisplaySlug && x.active) || null;
+
+  selector.innerHTML=`<option value="">اختر شاشة النداء</option>` +
+    displayConfigs.filter(x=>x.active).map(x=>`<option value="${x.slug}" ${x.slug===activeDisplaySlug?"selected":""}>${x.name}</option>`).join("");
+
+  if(!cfg){
+    title.textContent="الرجاء اختيار شاشة النداء";
+    latestBox.innerHTML=`<div class="call-card" style="grid-column:1/-1"><div class="muted">لم يتم تحديد شاشة نداء</div></div>`;
+    historyBox.innerHTML="";
+    return;
+  }
+
+  title.textContent=cfg.name;
+
+  const { data, error } = await supabaseClient
+    .from("calls")
+    .select("ticket_number,counter_number,called_at,hall_id,tickets(department,section)")
+    .order("called_at",{ascending:false})
+    .limit(60);
 
   if(error){
     console.error("Supabase display read failed:", error);
@@ -1536,19 +1722,37 @@ async function renderDisplay(){
     return;
   }
 
-  const calls=data || [];
-  const latest=calls[0];
+  const filtered=(data || []).filter(c=>{
+    const ticket=Array.isArray(c.tickets) ? c.tickets[0] : c.tickets;
+    if(cfg.hall_id && Number(c.hall_id)!==Number(cfg.hall_id)) return false;
+    if(cfg.department && ticket?.department!==cfg.department) return false;
+    if(cfg.section && ticket?.section!==cfg.section) return false;
+    if(Array.isArray(cfg.counter_numbers) && cfg.counter_numbers.length && !cfg.counter_numbers.includes(Number(c.counter_number))) return false;
+    return true;
+  }).slice(0,8);
+
+  const latest=filtered[0];
 
   if(!latest){
     latestBox.innerHTML=`<div class="call-card" style="grid-column:1/-1"><div class="muted">بانتظار أول نداء</div></div>`;
-  } else {
+  }else{
     latestBox.innerHTML=`
       <div class="call-card"><div class="muted">رقم الانتظار</div><div class="n">${latest.ticket_number}</div></div>
       <div class="call-card"><div class="muted">يرجى التوجه إلى</div><div class="c">كاونتر ${latest.counter_number}</div></div>`;
   }
 
-  historyBox.innerHTML=calls.slice(1).map(c=>`
+  historyBox.innerHTML=filtered.slice(1).map(c=>`
     <div class="hist"><b style="font-size:26px">${c.ticket_number}</b><div>كاونتر ${c.counter_number}</div></div>`).join("");
+}
+
+function selectPublicDisplay(slug){
+  activeDisplaySlug=slug || null;
+  if(slug){
+    const url=new URL(window.location.href);
+    url.searchParams.set("display",slug);
+    window.history.replaceState({},document.title,url.toString());
+  }
+  renderDisplay();
 }
 
 // Keep the shared queue/display fresh across separate devices.
@@ -1558,6 +1762,278 @@ setInterval(()=>{
   if(document.getElementById("display").classList.contains("active")) renderDisplay();
   if(staff) refreshStaff();
 },2000);
+
+async function loadHallsAndDisplays(){
+  const [{data:hallData,error:hallError},{data:displayData,error:displayError}] = await Promise.all([
+    supabaseClient.from("halls").select("id,name,slug,active,sort_order").order("sort_order",{ascending:true}),
+    supabaseClient.from("display_configs").select("id,name,slug,hall_id,department,section,counter_numbers,active,halls(name,slug)").order("id",{ascending:true})
+  ]);
+
+  if(hallError) console.error("Hall load failed:",hallError);
+  else halls=hallData || [];
+
+  if(displayError) console.error("Display config load failed:",displayError);
+  else displayConfigs=displayData || [];
+
+  populateHallSelects();
+  return !hallError && !displayError;
+}
+
+function populateHallSelects(){
+  const opts=halls.filter(h=>h.active).map(h=>`<option value="${h.id}">${h.name}</option>`).join("");
+
+  const counterHall=document.getElementById("hallCounterHall");
+  if(counterHall) counterHall.innerHTML=`<option value="">اختر القاعة</option>${opts}`;
+
+  const displayHall=document.getElementById("displayHall");
+  if(displayHall) displayHall.innerHTML=`<option value="">جميع القاعات / غير محدد</option>${opts}`;
+}
+
+function hideAdminSubpanels(exceptId){
+  ["hallManagementPanel","displayManagementPanel","serviceManagementPanel","userPermissionsPanel","manageUserPanel","addUserPanel"].forEach(id=>{
+    if(id!==exceptId) document.getElementById(id)?.classList.add("hidden");
+  });
+}
+
+async function openHallManagement(){
+  hideAdminSubpanels("hallManagementPanel");
+  document.getElementById("hallManagementPanel").classList.remove("hidden");
+  await loadHallsAndDisplays();
+  await renderHallAdminTable();
+  document.getElementById("hallManagementPanel").scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+function closeHallManagement(){
+  document.getElementById("hallManagementPanel").classList.add("hidden");
+}
+
+function normalizeSlug(s){
+  return String(s||"").trim().toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9_-]/g,"");
+}
+
+async function saveHall(){
+  const name=document.getElementById("hallName").value.trim();
+  const slug=normalizeSlug(document.getElementById("hallSlug").value);
+  const sort_order=Number(document.getElementById("hallSort").value || 100);
+  const msg=document.getElementById("hallAdminMessage");
+
+  if(!name || !slug){
+    msg.textContent="يرجى إدخال اسم القاعة ورمزها.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  const {error}=await supabaseClient.from("halls").insert({name,slug,sort_order,active:true});
+  if(error){
+    msg.textContent=error.code==="23505" ? "اسم القاعة أو رمزها مستخدم مسبقاً." : `تعذر إضافة القاعة: ${error.message}`;
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  msg.textContent="تمت إضافة القاعة بنجاح.";
+  msg.classList.remove("hidden");
+  document.getElementById("hallName").value="";
+  document.getElementById("hallSlug").value="";
+  await loadHallsAndDisplays();
+  await renderHallAdminTable();
+}
+
+async function assignCounterToHall(){
+  const counter=Number(document.getElementById("hallCounterNo").value);
+  const hall_id=Number(document.getElementById("hallCounterHall").value);
+  const msg=document.getElementById("hallAdminMessage");
+
+  if(!counter || !hall_id){
+    msg.textContent="يرجى إدخال رقم الكاونتر واختيار القاعة.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  const {error}=await supabaseClient.from("counters").upsert(
+    {counter_number:counter,hall_id,active:true},
+    {onConflict:"counter_number"}
+  );
+
+  if(error){
+    msg.textContent=`تعذر حفظ تعيين الكاونتر: ${error.message}`;
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  msg.textContent="تم تعيين الكاونتر إلى القاعة بنجاح.";
+  msg.classList.remove("hidden");
+  document.getElementById("hallCounterNo").value="";
+  await renderHallAdminTable();
+}
+
+async function renderHallAdminTable(){
+  const {data:counters,error}=await supabaseClient
+    .from("counters")
+    .select("counter_number,active,hall_id")
+    .order("counter_number",{ascending:true});
+
+  if(error) console.error("Counter admin read failed:",error);
+
+  const byHall={};
+  (counters||[]).forEach(c=>{
+    if(c.hall_id) (byHall[c.hall_id] ||= []).push(c.counter_number);
+  });
+
+  const body=document.getElementById("hallAdminTable");
+  body.innerHTML=halls.map(h=>`
+    <tr>
+      <td style="padding:10px;border-bottom:1px solid var(--border)"><b>${h.name}</b></td>
+      <td style="padding:10px;border-bottom:1px solid var(--border)" dir="ltr">${h.slug}</td>
+      <td style="padding:10px;border-bottom:1px solid var(--border)">${(byHall[h.id]||[]).map(x=>`كاونتر ${x}`).join("، ") || "—"}</td>
+      <td style="padding:10px;border-bottom:1px solid var(--border)"><span class="tag">${h.active?"نشطة":"موقوفة"}</span></td>
+      <td style="padding:10px;border-bottom:1px solid var(--border)">
+        <button class="btn" style="padding:7px 10px" onclick="toggleHall(${h.id},${h.active?"false":"true"})">${h.active?"إيقاف":"تفعيل"}</button>
+      </td>
+    </tr>
+  `).join("");
+}
+
+async function toggleHall(id,active){
+  const {error}=await supabaseClient.from("halls").update({active}).eq("id",id);
+  if(error){ alert(`تعذر تحديث القاعة: ${error.message}`); return; }
+  await loadHallsAndDisplays();
+  await renderHallAdminTable();
+}
+
+async function openDisplayManagement(){
+  hideAdminSubpanels("displayManagementPanel");
+  document.getElementById("displayManagementPanel").classList.remove("hidden");
+  await loadHallsAndDisplays();
+  renderDisplayAdminTable();
+  displayDeptChanged();
+  document.getElementById("displayManagementPanel").scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+function closeDisplayManagement(){
+  document.getElementById("displayManagementPanel").classList.add("hidden");
+}
+
+function displayDeptChanged(){
+  const dept=document.getElementById("displayDept").value;
+  const wrap=document.getElementById("displaySectionWrap");
+  if(dept==="graduates") wrap.classList.remove("hidden");
+  else{
+    wrap.classList.add("hidden");
+    document.getElementById("displaySection").value="";
+  }
+}
+
+function parseCounterList(value){
+  const raw=String(value||"").split(",").map(x=>Number(x.trim())).filter(x=>Number.isInteger(x) && x>0);
+  return [...new Set(raw)];
+}
+
+async function saveDisplayConfig(){
+  const name=document.getElementById("displayName").value.trim();
+  const slug=normalizeSlug(document.getElementById("displaySlug").value);
+  const hallValue=document.getElementById("displayHall").value;
+  const department=document.getElementById("displayDept").value || null;
+  const section=department==="graduates" ? (document.getElementById("displaySection").value || null) : null;
+  const counter_numbers=parseCounterList(document.getElementById("displayCounters").value);
+  const hall_id=hallValue ? Number(hallValue) : null;
+  const msg=document.getElementById("displayAdminMessage");
+
+  if(!name || !slug){
+    msg.textContent="يرجى إدخال اسم الشاشة ورمزها.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  if(!hall_id && !department && !section && !counter_numbers.length){
+    msg.textContent="يجب تحديد نطاق واحد على الأقل للشاشة: قاعة أو إدارة أو قسم أو كاونترات.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  const {error}=await supabaseClient.from("display_configs").insert({
+    name,slug,hall_id,department,section,
+    counter_numbers:counter_numbers.length ? counter_numbers : null,
+    active:true
+  });
+
+  if(error){
+    msg.textContent=error.code==="23505" ? "رمز شاشة النداء مستخدم مسبقاً." : `تعذر إضافة الشاشة: ${error.message}`;
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  msg.textContent="تمت إضافة شاشة النداء بنجاح.";
+  msg.classList.remove("hidden");
+  document.getElementById("displayName").value="";
+  document.getElementById("displaySlug").value="";
+  document.getElementById("displayCounters").value="";
+  await loadHallsAndDisplays();
+  renderDisplayAdminTable();
+}
+
+function displayConfigUrl(slug){
+  const url=new URL(window.location.href);
+  url.search="";
+  url.hash="";
+  url.searchParams.set("display",slug);
+  return url.toString();
+}
+
+async function copyDisplayUrl(slug){
+  const url=displayConfigUrl(slug);
+  try{
+    await navigator.clipboard.writeText(url);
+    alert("تم نسخ رابط شاشة النداء.");
+  }catch{
+    prompt("رابط شاشة النداء:",url);
+  }
+}
+
+function renderDisplayAdminTable(){
+  const body=document.getElementById("displayAdminTable");
+  if(!displayConfigs.length){
+    body.innerHTML=`<tr><td colspan="6" class="muted" style="padding:20px;text-align:center">لا توجد شاشات نداء معرفة بعد.</td></tr>`;
+    return;
+  }
+
+  body.innerHTML=displayConfigs.map(d=>{
+    const hall=d.halls?.name || "—";
+    const route=[d.department?departmentLabel(d.department):null,d.section?sectionLabel(d.section):null].filter(Boolean).join(" / ") || "—";
+    const counters=(d.counter_numbers||[]).map(x=>`كاونتر ${x}`).join("، ") || "—";
+    return `
+      <tr>
+        <td style="padding:10px;border-bottom:1px solid var(--border)"><b>${d.name}</b><br><small dir="ltr">${d.slug}</small></td>
+        <td style="padding:10px;border-bottom:1px solid var(--border)">${hall}</td>
+        <td style="padding:10px;border-bottom:1px solid var(--border)">${route}</td>
+        <td style="padding:10px;border-bottom:1px solid var(--border)">${counters}</td>
+        <td style="padding:10px;border-bottom:1px solid var(--border)"><span class="tag">${d.active?"نشطة":"موقوفة"}</span></td>
+        <td style="padding:10px;border-bottom:1px solid var(--border)">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn" style="padding:7px 10px" onclick="copyDisplayUrl('${d.slug}')">نسخ الرابط</button>
+            <button class="btn" style="padding:7px 10px" onclick="toggleDisplayConfig(${d.id},${d.active?"false":"true"})">${d.active?"إيقاف":"تفعيل"}</button>
+          </div>
+        </td>
+      </tr>`;
+  }).join("");
+}
+
+async function toggleDisplayConfig(id,active){
+  const {error}=await supabaseClient.from("display_configs").update({active}).eq("id",id);
+  if(error){ alert(`تعذر تحديث شاشة النداء: ${error.message}`); return; }
+  await loadHallsAndDisplays();
+  renderDisplayAdminTable();
+}
+
+async function applyDisplayUrl(){
+  const slug=new URL(window.location.href).searchParams.get("display");
+  if(!slug) return false;
+
+  activeDisplaySlug=slug;
+  await loadHallsAndDisplays();
+  showView("display");
+  renderDisplay();
+  return true;
+}
 
 async function loadServiceCatalog(){
   const { data, error } = await supabaseClient
@@ -1592,9 +2068,7 @@ function serviceRouteRule(dept,section){
 }
 
 async function openServiceManagement(){
-  document.getElementById("userPermissionsPanel").classList.add("hidden");
-  document.getElementById("manageUserPanel").classList.add("hidden");
-  document.getElementById("addUserPanel").classList.add("hidden");
+  hideAdminSubpanels("serviceManagementPanel");
   document.getElementById("serviceManagementPanel").classList.remove("hidden");
   await loadServiceCatalog();
   renderServiceAdminTable();
@@ -1729,9 +2203,7 @@ async function openUserPermissions(id){
   if(!u) return;
 
   selectedPermissionUser=u;
-  document.getElementById("serviceManagementPanel").classList.add("hidden");
-  document.getElementById("manageUserPanel").classList.add("hidden");
-  document.getElementById("addUserPanel").classList.add("hidden");
+  hideAdminSubpanels("userPermissionsPanel");
   document.getElementById("userPermissionsPanel").classList.remove("hidden");
   document.getElementById("permUserName").textContent=u.full_name || u.username || "";
   document.getElementById("permDept").value="";
@@ -2477,8 +2949,12 @@ async function handleRecoveryMode(){
 (async ()=>{
   const recovery=await handleRecoveryMode();
   if(!recovery){
-    loadServiceCatalog().finally(()=>visitorHome());
-    renderDisplay();
+    await Promise.all([loadServiceCatalog(),loadHallsAndDisplays()]);
+    const displayMode=await applyDisplayUrl();
+    if(!displayMode){
+      visitorHome();
+      renderDisplay();
+    }
   }
 })();
 </script>
