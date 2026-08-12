@@ -610,7 +610,13 @@
         </div>
 
         <div id="permServicesWrap" class="hidden" style="margin-top:12px">
-          <b>الخدمات</b>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <b>الخدمات</b>
+            <label class="check" style="margin:0">
+              <input type="checkbox" id="permSelectAllServices" onchange="toggleAllPermissionServices(this.checked)">
+              تحديد جميع الخدمات
+            </label>
+          </div>
           <div id="permServices" class="checklist" style="margin-top:8px"></div>
         </div>
 
@@ -724,7 +730,14 @@
   </section>
 </main>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+// Refresh central staff permissions automatically so superuser changes
+// take effect without requiring logout/login.
+setInterval(()=>{
+  if(staff) refreshStaffPermissions();
+}, 5000);
+
+</script>
 <script>
 const SUPABASE_URL = "https://vhgomdfcjdnaeyfpkwml.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_UVsWadynTeVfbScOqtZK5Q_l047zqcc";
@@ -1135,6 +1148,45 @@ function showIssuedTicket(t){
   refreshStaff();
 }
 
+async function fetchCentralPermissions(userId){
+  const { data:permissionRows, error:permissionError } = await supabaseClient
+    .from("staff_permissions")
+    .select("department,section,college,letter_range,service_catalog(service_name)")
+    .eq("user_id",userId);
+
+  if(permissionError){
+    console.error("Central permissions read failed:", permissionError);
+    return [];
+  }
+
+  return (permissionRows || []).map(p=>{
+    const serviceName=p.service_catalog?.service_name;
+    if(!serviceName) return null;
+    let key=p.department;
+    if(p.section) key+=`|${p.section}`;
+    key+=`|${serviceName}`;
+    if(p.college) key+=`|${p.college}`;
+    if(p.letter_range) key+=`|${p.letter_range}`;
+    return key;
+  }).filter(Boolean);
+}
+
+async function refreshStaffPermissions(){
+  if(!staff?.userId) return;
+
+  const updated=await fetchCentralPermissions(staff.userId);
+  const oldJson=JSON.stringify(staff.permissions || []);
+  const newJson=JSON.stringify(updated || []);
+
+  if(oldJson!==newJson){
+    staff.permissions=updated;
+    console.info("Central permissions refreshed.");
+    if(document.getElementById("staff")?.classList.contains("active")){
+      await refreshStaff();
+    }
+  }
+}
+
 async function staffLogin(){
   const email=document.getElementById("staffEmail").value.trim();
   const password=document.getElementById("staffPassword").value;
@@ -1176,26 +1228,7 @@ async function staffLogin(){
     return;
   }
 
-  let centralPermissions=[];
-  const { data:permissionRows, error:permissionError } = await supabaseClient
-    .from("staff_permissions")
-    .select("department,section,college,letter_range,service_catalog(service_name)")
-    .eq("user_id",profile.id);
-
-  if(permissionError){
-    console.error("Central permissions read failed:", permissionError);
-  }else{
-    centralPermissions=(permissionRows || []).map(p=>{
-      const serviceName=p.service_catalog?.service_name;
-      if(!serviceName) return null;
-      let key=p.department;
-      if(p.section) key+=`|${p.section}`;
-      key+=`|${serviceName}`;
-      if(p.college) key+=`|${p.college}`;
-      if(p.letter_range) key+=`|${p.letter_range}`;
-      return key;
-    }).filter(Boolean);
-  }
+  const centralPermissions=await fetchCentralPermissions(profile.id);
 
   let counterRow=null;
   let counterError=null;
@@ -2285,6 +2318,8 @@ function renderPermissionBuilder(){
     servicesWrap.classList.add("hidden");
     collegesWrap.classList.add("hidden");
     rangesWrap.classList.add("hidden");
+    const selectAll=document.getElementById("permSelectAllServices");
+    if(selectAll){ selectAll.checked=false; selectAll.indeterminate=false; }
     return;
   }
 
@@ -2300,7 +2335,25 @@ function renderPermissionBuilder(){
   permissionSelectionChanged();
 }
 
+function toggleAllPermissionServices(checked){
+  document.querySelectorAll(".perm-service").forEach(cb=>{
+    cb.checked=checked;
+  });
+  permissionSelectionChanged();
+}
+
+function syncPermissionSelectAll(){
+  const all=[...document.querySelectorAll(".perm-service")];
+  const selected=all.filter(x=>x.checked);
+  const selectAll=document.getElementById("permSelectAllServices");
+  if(selectAll){
+    selectAll.checked=all.length>0 && selected.length===all.length;
+    selectAll.indeterminate=selected.length>0 && selected.length<all.length;
+  }
+}
+
 function permissionSelectionChanged(){
+  syncPermissionSelectAll();
   const dept=document.getElementById("permDept").value;
   const section=document.getElementById("permSection").value;
   const selected=[...document.querySelectorAll(".perm-service:checked")];
