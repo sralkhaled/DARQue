@@ -167,8 +167,14 @@
         <input id="staffPassword" type="password" placeholder="أدخل كلمة المرور" />
       </div>
       <div class="field">
+        <label>القاعة</label>
+        <select id="staffHall">
+          <option value="">اختر القاعة</option>
+        </select>
+      </div>
+      <div class="field">
         <label>رقم الكاونتر</label>
-        <input id="counterNo" type="number" min="1" placeholder="مثال: 12" />
+        <input id="counterNo" type="number" min="1" placeholder="مثال: 1" />
       </div>
       <button class="btn primary" onclick="staffLogin()">دخول</button>
     </div>
@@ -1132,10 +1138,11 @@ function showIssuedTicket(t){
 async function staffLogin(){
   const email=document.getElementById("staffEmail").value.trim();
   const password=document.getElementById("staffPassword").value;
+  const hall=document.getElementById("staffHall").value;
   const counter=document.getElementById("counterNo").value.trim();
 
-  if(!email || !password || !counter){
-    alert("يرجى إدخال البريد الإلكتروني وكلمة المرور ورقم الكاونتر.");
+  if(!email || !password){
+    alert("يرجى إدخال البريد الإلكتروني وكلمة المرور.");
     return;
   }
 
@@ -1190,11 +1197,20 @@ async function staffLogin(){
     }).filter(Boolean);
   }
 
-  const { data:counterRow, error:counterError } = await supabaseClient
-    .from("counters")
-    .select("counter_number,active,hall_id,halls(name,slug,active)")
-    .eq("counter_number",Number(counter))
-    .maybeSingle();
+  let counterRow=null;
+  let counterError=null;
+
+  if(hall && counter){
+    const counterResult = await supabaseClient
+      .from("counters")
+      .select("id,counter_number,active,hall_id,halls(name,slug,active)")
+      .eq("hall_id",Number(hall))
+      .eq("counter_number",Number(counter))
+      .maybeSingle();
+
+    counterRow=counterResult.data;
+    counterError=counterResult.error;
+  }
 
   if(counterError){
     console.error("Counter assignment read failed:",counterError);
@@ -1209,12 +1225,11 @@ async function staffLogin(){
     !!counterRow.hall_id &&
     counterRow.halls?.active === true;
 
-  // Normal staff must work from a counter assigned to an active hall.
-  // Superusers are allowed to sign in without a hall so they can reach
-  // مدير النظام → إدارة القاعات and configure the system.
-  if(profile.role!=="superuser" && !hasActiveHall){
+  // Normal staff must select a valid hall + counter combination.
+  // Superusers may still enter without one so they can configure halls/counters.
+  if(profile.role!=="superuser" && (!hall || !counter || !hasActiveHall)){
     await supabaseClient.auth.signOut();
-    alert("هذا الكاونتر غير معين إلى قاعة نشطة. يرجى مراجعة مدير النظام.");
+    alert("يرجى اختيار القاعة والكاونتر المعين لها. راجع مدير النظام إذا لم يظهر التعيين الصحيح.");
     return;
   }
 
@@ -1224,7 +1239,8 @@ async function staffLogin(){
     name:profile.full_name,
     role:profile.role,
     department:profile.department,
-    counter,
+    counter:hasActiveHall ? String(counterRow.counter_number) : "",
+    counterId:hasActiveHall ? counterRow.id : null,
     hallId:hasActiveHall ? counterRow.hall_id : null,
     hallName:hasActiveHall ? (counterRow.halls?.name || "") : "غير معين",
     hallSlug:hasActiveHall ? (counterRow.halls?.slug || "") : "",
@@ -1253,11 +1269,13 @@ async function staffLogout(){
   document.getElementById("staffPanel").classList.add("hidden");
   document.getElementById("staffLogin").classList.remove("hidden");
   document.getElementById("staffPassword").value="";
+  document.getElementById("counterNo").value="";
+  if(document.getElementById("staffHall")) document.getElementById("staffHall").value="";
   showView("visitor");
 }
 function renderPermissions(){
   const roleLabel=staff.role==="superuser" ? "مدير النظام" : "موظف";
-  document.getElementById("staffIdentity").innerHTML=`الموظف: <b>${staff.name}</b> — الصلاحية: <b>${roleLabel}</b> — القاعة: <b>${staff.hallName}</b> — الكاونتر: <b>${staff.counter}</b>`;
+  document.getElementById("staffIdentity").innerHTML=`الموظف: <b>${staff.name}</b> — الصلاحية: <b>${roleLabel}</b> — القاعة: <b>${staff.hallName}</b> — الكاونتر: <b>${staff.counter || "غير معين"}</b>`;
   document.getElementById("routeDept").value="";
   document.getElementById("routeSection").value="";
   document.getElementById("routeSectionWrap").classList.add("hidden");
@@ -1535,6 +1553,7 @@ async function refreshStaff(){
     .from("tickets")
     .select("id",{count:"exact",head:true})
     .eq("status","done")
+    .eq("hall_id",Number(staff.hallId))
     .eq("counter_number",Number(staff.counter));
 
   if(servedError){
@@ -1598,6 +1617,7 @@ async function callNext(){
     .from("tickets")
     .update({
       status:"called",
+      hall_id:staff.hallId,
       counter_number:Number(staff.counter),
       called_at:now
     })
@@ -1630,7 +1650,9 @@ async function pushCall(t){
       ticket_id:t.id,
       ticket_number:t.number,
       counter_number:Number(staff.counter),
-      hall_id:staff.hallId
+      hall_id:staff.hallId,
+      department:t.dept,
+      section:t.section || null
     });
 
   if(error){
@@ -1724,7 +1746,7 @@ async function renderDisplay(){
 
   const { data, error } = await supabaseClient
     .from("calls")
-    .select("ticket_number,counter_number,called_at,hall_id,tickets(department,section)")
+    .select("ticket_number,counter_number,called_at,hall_id,department,section")
     .order("called_at",{ascending:false})
     .limit(60);
 
@@ -1736,10 +1758,9 @@ async function renderDisplay(){
   }
 
   const filtered=(data || []).filter(c=>{
-    const ticket=Array.isArray(c.tickets) ? c.tickets[0] : c.tickets;
     if(cfg.hall_id && Number(c.hall_id)!==Number(cfg.hall_id)) return false;
-    if(cfg.department && ticket?.department!==cfg.department) return false;
-    if(cfg.section && ticket?.section!==cfg.section) return false;
+    if(cfg.department && c.department!==cfg.department) return false;
+    if(cfg.section && c.section!==cfg.section) return false;
     if(Array.isArray(cfg.counter_numbers) && cfg.counter_numbers.length && !cfg.counter_numbers.includes(Number(c.counter_number))) return false;
     return true;
   }).slice(0,8);
@@ -1797,6 +1818,9 @@ function populateHallSelects(){
 
   const counterHall=document.getElementById("hallCounterHall");
   if(counterHall) counterHall.innerHTML=`<option value="">اختر القاعة</option>${opts}`;
+
+  const staffHall=document.getElementById("staffHall");
+  if(staffHall) staffHall.innerHTML=`<option value="">اختر القاعة</option>${opts}`;
 
   const displayHall=document.getElementById("displayHall");
   if(displayHall) displayHall.innerHTML=`<option value="">جميع القاعات / غير محدد</option>${opts}`;
@@ -1864,7 +1888,7 @@ async function assignCounterToHall(){
 
   const {error}=await supabaseClient.from("counters").upsert(
     {counter_number:counter,hall_id,active:true},
-    {onConflict:"counter_number"}
+    {onConflict:"hall_id,counter_number"}
   );
 
   if(error){
@@ -1959,6 +1983,12 @@ async function saveDisplayConfig(){
 
   if(!hall_id && !department && !section && !counter_numbers.length){
     msg.textContent="يجب تحديد نطاق واحد على الأقل للشاشة: قاعة أو إدارة أو قسم أو كاونترات.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  if(counter_numbers.length && !hall_id){
+    msg.textContent="عند تحديد كاونترات معينة، يرجى تحديد القاعة أيضاً لأن رقم الكاونتر قد يتكرر بين القاعات.";
     msg.classList.remove("hidden");
     return;
   }
