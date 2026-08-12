@@ -243,12 +243,7 @@
   </section>
 </main>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const SUPABASE_URL = "https://vhgomdfcjdnaeyfpkwml.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_UVsWadynTeVfbScOqtZK5Q_l047zqcc";
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
-
 const ARABIC_LETTERS = ["أ","ب","ت","ث","ج","ح","خ","د","ذ","ر","ز","س","ش","ص","ض","ط","ظ","ع","غ","ف","ق","ك","ل","م","ن","هـ","و","ي"];
 
 const departments = {
@@ -520,7 +515,7 @@ function selectLetter(i){
   issueTicket();
 }
 
-async function issueTicket(){
+function issueTicket(){
   const cfg=currentConfig();
   let prefix = visitorState.dept==="graduates" ? cfg.prefix : departments[visitorState.dept].prefix;
   const seq=getSeq(); seq[prefix]=(seq[prefix]||0)+1; saveSeq(seq);
@@ -528,35 +523,9 @@ async function issueTicket(){
   if(visitorState.dept==="graduates" && cfg.needsCollegeLetter){
     range=findGradRange(visitorState.college,visitorState.letter);
   }
-
-  const ticketNumber=`${prefix}-${String(seq[prefix]).padStart(3,"0")}`;
-
-  const dbTicket={
-    ticket_number:ticketNumber,
-    department:visitorState.dept,
-    section:visitorState.section,
-    service:visitorState.service,
-    college:visitorState.college,
-    name_letter:visitorState.letter,
-    letter_range:range,
-    status:"waiting"
-  };
-
-  const { data, error } = await supabaseClient
-    .from("tickets")
-    .insert(dbTicket)
-    .select("id,ticket_number")
-    .single();
-
-  if(error){
-    console.error("Supabase ticket insert failed:", error);
-    alert("تعذر إصدار رقم الانتظار. يرجى المحاولة مرة أخرى.");
-    return;
-  }
-
   const t={
-    id:data.id,
-    number:data.ticket_number,
+    id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random()),
+    number:`${prefix}-${String(seq[prefix]).padStart(3,"0")}`,
     dept:visitorState.dept,
     section:visitorState.section,
     service:visitorState.service,
@@ -567,12 +536,10 @@ async function issueTicket(){
     createdAt:Date.now(),
     counter:null
   };
-
-  // Keep a local copy only so the existing prototype counter screen continues to function
-  // during this first Supabase connection test.
   const tickets=getTickets(); tickets.push(t); saveTickets(tickets);
   showIssuedTicket(t);
 }
+
 function showIssuedTicket(t){
   const root=document.getElementById("visitorRoot");
   const deptLabel=t.dept==="graduates" ? `إدارة الخريجين / ${departments.graduates.sections[t.section].name}` : departments[t.dept].name;
