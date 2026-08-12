@@ -181,6 +181,13 @@
           <p class="muted">اختر موقع العمل الحالي ثم قائمة الانتظار التي سيخدمها هذا الكاونتر من الصلاحيات التي حددها مدير النظام.</p>
 
           <div class="field" style="margin-top:12px">
+            <label>شاشة النداء / موقع الخدمة</label>
+            <select id="staffDisplayDestination" onchange="staffDisplayDestinationChanged()">
+              <option value="">اختر شاشة النداء</option>
+            </select>
+          </div>
+
+          <div class="field hidden" id="staffCounterWrap">
             <label>الكاونتر</label>
             <select id="staffWorkstation">
               <option value="">اختر الكاونتر</option>
@@ -188,7 +195,7 @@
           </div>
 
           <div class="actions" style="margin-top:0">
-            <button class="btn primary" onclick="applyStaffWorkstation()">تحديد الكاونتر</button>
+            <button class="btn primary" onclick="applyStaffWorkstation()">تحديد موقع الخدمة</button>
           </div>
 
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:12px 0 10px">
@@ -1297,6 +1304,9 @@ async function staffLogin(){
     hallId:null,
     hallName:"غير معين",
     hallSlug:"",
+    displaySlug:"",
+    displayName:"غير معين",
+    displayRequiresCounter:false,
     permissions:centralPermissions,
     centralPermissions:[...centralPermissions],
     activePermissions:[...centralPermissions]
@@ -1344,46 +1354,119 @@ async function loadAvailableWorkCounters(){
   }
 
   availableWorkCounters=(data || []).filter(c=>!c.hall_id || c.halls?.active);
-  populateStaffWorkstations();
+  populateStaffDisplayDestinations();
   return true;
 }
 
-function workstationLabel(c){
-  if(c.hall_id && c.halls?.name) return `${c.halls.name} — كاونتر ${c.counter_number}`;
-  return `كاونتر ${c.counter_number} — بدون قاعة`;
-}
-
-function populateStaffWorkstations(){
-  const el=document.getElementById("staffWorkstation");
+function populateStaffDisplayDestinations(){
+  const el=document.getElementById("staffDisplayDestination");
   if(!el) return;
 
-  const current=staff?.counterId ? String(staff.counterId) : el.value;
-  el.innerHTML=`<option value="">اختر الكاونتر</option>` +
-    availableWorkCounters.map(c=>`<option value="${c.id}">${workstationLabel(c)}</option>`).join("");
+  const current=staff?.displaySlug || el.value;
+  const activeScreens=(displayConfigs || []).filter(d=>d.active);
 
-  if([...el.options].some(o=>o.value===current)) el.value=current;
+  el.innerHTML=`<option value="">اختر شاشة النداء</option>` +
+    activeScreens.map(d=>`<option value="${d.slug}">${d.name}</option>`).join("");
+
+  if([...el.options].some(o=>o.value===current)){
+    el.value=current;
+  }
+
+  staffDisplayDestinationChanged();
+}
+
+function selectedStaffDisplay(){
+  const slug=document.getElementById("staffDisplayDestination")?.value || "";
+  return (displayConfigs || []).find(d=>d.slug===slug && d.active) || null;
+}
+
+function displayRequiresCounter(cfg){
+  return !!cfg?.hall_id || (Array.isArray(cfg?.counter_numbers) && cfg.counter_numbers.length>0);
+}
+
+function staffDisplayDestinationChanged(){
+  const cfg=selectedStaffDisplay();
+  const wrap=document.getElementById("staffCounterWrap");
+  const counterEl=document.getElementById("staffWorkstation");
+  if(!wrap || !counterEl) return;
+
+  if(!cfg || !displayRequiresCounter(cfg)){
+    wrap.classList.add("hidden");
+    counterEl.innerHTML=`<option value="">غير مطلوب</option>`;
+    return;
+  }
+
+  let rows=[...availableWorkCounters];
+
+  if(cfg.hall_id){
+    rows=rows.filter(c=>Number(c.hall_id)===Number(cfg.hall_id));
+  }
+
+  if(Array.isArray(cfg.counter_numbers) && cfg.counter_numbers.length){
+    rows=rows.filter(c=>cfg.counter_numbers.includes(Number(c.counter_number)));
+  }
+
+  wrap.classList.remove("hidden");
+  counterEl.innerHTML=`<option value="">اختر الكاونتر</option>` +
+    rows.map(c=>`<option value="${c.id}">كاونتر ${c.counter_number}</option>`).join("");
+
+  if(staff?.counterId && [...counterEl.options].some(o=>o.value===String(staff.counterId))){
+    counterEl.value=String(staff.counterId);
+  }
+}
+
+function displayMatchesTicket(cfg,t){
+  if(!cfg || !t) return false;
+  if(cfg.department && t.dept!==cfg.department) return false;
+  if(cfg.section && t.section!==cfg.section) return false;
+  if(cfg.service && t.service!==cfg.service) return false;
+  return true;
 }
 
 async function applyStaffWorkstation(){
   if(!staff) return;
 
-  const counterId=Number(document.getElementById("staffWorkstation").value || 0);
-  if(!counterId){
-    alert("يرجى اختيار الكاونتر.");
+  const cfg=selectedStaffDisplay();
+  if(!cfg){
+    alert("يرجى اختيار شاشة النداء / موقع الخدمة.");
     return;
   }
 
-  const row=availableWorkCounters.find(c=>Number(c.id)===counterId);
-  if(!row){
-    alert("الكاونتر المحدد غير متاح.");
-    return;
+  const requiresCounter=displayRequiresCounter(cfg);
+  let row=null;
+
+  if(requiresCounter){
+    const counterId=Number(document.getElementById("staffWorkstation").value || 0);
+    if(!counterId){
+      alert("يرجى اختيار الكاونتر.");
+      return;
+    }
+
+    row=availableWorkCounters.find(c=>Number(c.id)===counterId);
+    if(!row){
+      alert("الكاونتر المحدد غير متاح.");
+      return;
+    }
   }
 
-  staff.counterId=row.id;
-  staff.counter=String(row.counter_number);
-  staff.hallId=row.hall_id || null;
-  staff.hallName=row.hall_id ? (row.halls?.name || "غير معين") : "بدون قاعة";
-  staff.hallSlug=row.hall_id ? (row.halls?.slug || "") : "";
+  staff.displaySlug=cfg.slug;
+  staff.displayName=cfg.name;
+  staff.displayRequiresCounter=requiresCounter;
+
+  if(row){
+    staff.counterId=row.id;
+    staff.counter=String(row.counter_number);
+    staff.hallId=row.hall_id || cfg.hall_id || null;
+    staff.hallName=row.hall_id ? (row.halls?.name || "غير معين") : "بدون قاعة";
+    staff.hallSlug=row.hall_id ? (row.halls?.slug || "") : "";
+  }else{
+    staff.counterId=null;
+    staff.counter="";
+    staff.hallId=cfg.hall_id || null;
+    const hall=(halls || []).find(h=>Number(h.id)===Number(cfg.hall_id));
+    staff.hallName=hall?.name || "بدون قاعة";
+    staff.hallSlug=hall?.slug || "";
+  }
 
   renderPermissions();
   await refreshStaff();
@@ -1416,9 +1499,10 @@ function permissionKeyLabel(key){
 
 function renderPermissions(){
   const roleLabel=staff.role==="superuser" ? "مدير النظام" : "موظف";
-  document.getElementById("staffIdentity").innerHTML=`الموظف: <b>${staff.name}</b> — الصلاحية: <b>${roleLabel}</b> — القاعة: <b>${staff.hallName}</b> — الكاونتر: <b>${staff.counter || "غير معين"}</b>`;
+  const counterPart=staff.counter ? ` — الكاونتر: <b>${staff.counter}</b>` : "";
+  document.getElementById("staffIdentity").innerHTML=`الموظف: <b>${staff.name}</b> — الصلاحية: <b>${roleLabel}</b> — شاشة النداء: <b>${staff.displayName || "غير معين"}</b>${counterPart}`;
 
-  populateStaffWorkstations();
+  populateStaffDisplayDestinations();
   renderAuthorizedQueueSelector();
 }
 
@@ -1692,16 +1776,23 @@ async function refreshStaff(){
 
   document.getElementById("waitingCount").textContent=q.length;
 
-  let servedQuery=supabaseClient
-    .from("tickets")
-    .select("id",{count:"exact",head:true})
-    .eq("status","done")
-    .eq("counter_number",Number(staff.counter));
+  let servedCount=0;
+  let servedError=null;
 
-  if(staff.hallId) servedQuery=servedQuery.eq("hall_id",Number(staff.hallId));
-  else servedQuery=servedQuery.is("hall_id",null);
+  if(staff.counter){
+    let servedQuery=supabaseClient
+      .from("tickets")
+      .select("id",{count:"exact",head:true})
+      .eq("status","done")
+      .eq("counter_number",Number(staff.counter));
 
-  const { count: servedCount, error: servedError } = await servedQuery;
+    if(staff.hallId) servedQuery=servedQuery.eq("hall_id",Number(staff.hallId));
+    else servedQuery=servedQuery.is("hall_id",null);
+
+    const servedResult=await servedQuery;
+    servedCount=servedResult.count || 0;
+    servedError=servedResult.error;
+  }
 
   if(servedError){
     console.error("Supabase served-count read failed:", servedError);
@@ -1742,7 +1833,11 @@ function renderCurrent(){
 }
 
 async function callNext(){
-  if(!staff?.counterId){
+  if(!staff?.displaySlug){
+    alert("يرجى تحديد شاشة النداء / موقع الخدمة قبل نداء أي رقم.");
+    return;
+  }
+  if(staff.displayRequiresCounter && !staff.counterId){
     alert("يرجى تحديد الكاونتر قبل نداء أي رقم.");
     return;
   }
@@ -1762,7 +1857,11 @@ async function callNext(){
 }
 
 async function callTicketById(ticketId){
-  if(!staff?.counterId){
+  if(!staff?.displaySlug){
+    alert("يرجى تحديد شاشة النداء / موقع الخدمة قبل نداء أي رقم.");
+    return;
+  }
+  if(staff.displayRequiresCounter && !staff.counterId){
     alert("يرجى تحديد الكاونتر قبل نداء أي رقم.");
     return;
   }
@@ -1781,14 +1880,20 @@ async function callTicketById(ticketId){
     return;
   }
 
+  const cfg=selectedStaffDisplay();
+  if(!cfg || !displayMatchesTicket(cfg,candidate)){
+    alert("شاشة النداء المحددة لا تتوافق مع قائمة انتظار هذا الدور. يرجى اختيار شاشة النداء المناسبة.");
+    return;
+  }
+
   const now=new Date().toISOString();
 
   const { data, error } = await supabaseClient
     .from("tickets")
     .update({
       status:"called",
-      hall_id:staff.hallId,
-      counter_number:Number(staff.counter),
+      hall_id:staff.hallId || null,
+      counter_number:staff.counter ? Number(staff.counter) : null,
       called_at:now
     })
     .eq("id",candidate.id)
@@ -1819,8 +1924,8 @@ async function pushCall(t){
     .insert({
       ticket_id:t.id,
       ticket_number:t.number,
-      counter_number:Number(staff.counter),
-      hall_id:staff.hallId,
+      counter_number:staff.counter ? Number(staff.counter) : null,
+      hall_id:staff.hallId || null,
       department:t.dept,
       section:t.section || null,
       service:t.service
@@ -1931,13 +2036,16 @@ async function renderDisplay(){
   if(!latest){
     latestBox.innerHTML=`<div class="call-card" style="grid-column:1/-1"><div class="muted">بانتظار أول نداء</div></div>`;
   }else{
+    const destination=latest.counter_number ? `كاونتر ${latest.counter_number}` : cfg.name;
     latestBox.innerHTML=`
       <div class="call-card"><div class="muted">رقم الانتظار</div><div class="n">${latest.ticket_number}</div></div>
-      <div class="call-card"><div class="muted">يرجى التوجه إلى</div><div class="c">كاونتر ${latest.counter_number}</div></div>`;
+      <div class="call-card"><div class="muted">يرجى التوجه إلى</div><div class="c">${destination}</div></div>`;
   }
 
-  historyBox.innerHTML=filtered.slice(1).map(c=>`
-    <div class="hist"><b style="font-size:26px">${c.ticket_number}</b><div>كاونتر ${c.counter_number}</div></div>`).join("");
+  historyBox.innerHTML=filtered.slice(1).map(c=>{
+    const destination=c.counter_number ? `كاونتر ${c.counter_number}` : cfg.name;
+    return `<div class="hist"><b style="font-size:26px">${c.ticket_number}</b><div>${destination}</div></div>`;
+  }).join("");
 }
 
 function selectPublicDisplay(slug){
@@ -2094,6 +2202,7 @@ async function loadHallsAndDisplays(){
   else displayConfigs=displayData || [];
 
   populateHallSelects();
+  if(staff) populateStaffDisplayDestinations();
   return !hallError && !displayError;
 }
 
