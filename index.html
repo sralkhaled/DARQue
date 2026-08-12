@@ -118,6 +118,7 @@
     <button data-view="visitor" class="active">المراجع</button>
     <button data-view="staff">الكاونتر</button>
     <button data-view="display">شاشة النداء</button>
+    <button data-view="admin" id="adminNavBtn" class="hidden">مدير النظام</button>
   </div>
 </header>
 
@@ -254,6 +255,74 @@
     </div>
   </section>
 
+  <!-- ADMIN -->
+  <section id="admin" class="view">
+    <div class="hero">
+      <h2>مدير النظام</h2>
+      <p>إدارة المستخدمين ومراجعة حسابات الموظفين</p>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+        <div>
+          <h3 class="section-title" style="margin-bottom:4px">إدارة المستخدمين</h3>
+          <div class="muted">عرض والبحث في حسابات الموظفين المسجلة بالنظام</div>
+        </div>
+        <button class="btn primary" onclick="adminAddUserPlaceholder()">+ إضافة مستخدم</button>
+      </div>
+
+      <div class="grid" style="grid-template-columns:2fr 1fr 1fr 1fr;margin-bottom:16px">
+        <div class="field" style="margin:0">
+          <label>بحث</label>
+          <input id="adminSearch" placeholder="ابحث بالاسم أو اسم المستخدم" oninput="renderAdminUsers()" />
+        </div>
+        <div class="field" style="margin:0">
+          <label>الإدارة</label>
+          <select id="adminDeptFilter" onchange="renderAdminUsers()">
+            <option value="">الكل</option>
+            <option value="registration">إدارة التسجيل</option>
+            <option value="records">إدارة السجلات</option>
+            <option value="admissions">إدارة القبول</option>
+            <option value="graduates">إدارة الخريجين</option>
+          </select>
+        </div>
+        <div class="field" style="margin:0">
+          <label>الصلاحية</label>
+          <select id="adminRoleFilter" onchange="renderAdminUsers()">
+            <option value="">الكل</option>
+            <option value="staff">موظف</option>
+            <option value="superuser">مدير النظام</option>
+          </select>
+        </div>
+        <div class="field" style="margin:0">
+          <label>الحالة</label>
+          <select id="adminStatusFilter" onchange="renderAdminUsers()">
+            <option value="">الكل</option>
+            <option value="active">نشط</option>
+            <option value="inactive">موقوف</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="adminUsersStatus" class="notice hidden"></div>
+
+      <div style="overflow:auto">
+        <table style="width:100%;border-collapse:collapse;min-width:760px">
+          <thead>
+            <tr>
+              <th style="text-align:right;padding:12px;border-bottom:1px solid var(--border)">اسم الموظف</th>
+              <th style="text-align:right;padding:12px;border-bottom:1px solid var(--border)">اسم المستخدم</th>
+              <th style="text-align:right;padding:12px;border-bottom:1px solid var(--border)">الإدارة</th>
+              <th style="text-align:right;padding:12px;border-bottom:1px solid var(--border)">الصلاحية</th>
+              <th style="text-align:right;padding:12px;border-bottom:1px solid var(--border)">الحالة</th>
+            </tr>
+          </thead>
+          <tbody id="adminUsersTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <!-- DISPLAY -->
   <section id="display" class="view">
     <div class="display-board">
@@ -362,11 +431,16 @@ function getSeq(){ return JSON.parse(localStorage.getItem("kuq_seq")||"{}"); }
 function saveSeq(x){ localStorage.setItem("kuq_seq",JSON.stringify(x)); }
 
 function showView(id){
+  if(id==="admin" && (!staff || staff.role!=="superuser")){
+    alert("هذه الصفحة متاحة لمدير النظام فقط.");
+    return;
+  }
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   document.getElementById(id).classList.add("active");
   document.querySelectorAll(".nav button").forEach(b=>b.classList.toggle("active",b.dataset.view===id));
   if(id==="display") renderDisplay();
   if(id==="staff" && staff) refreshStaff();
+  if(id==="admin") loadAdminUsers();
 }
 document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>showView(b.dataset.view));
 
@@ -666,6 +740,7 @@ async function staffLogin(){
     permissions:JSON.parse(localStorage.getItem(`kuq_perm_${counter}`)||"[]")
   };
 
+  document.getElementById("adminNavBtn").classList.toggle("hidden", profile.role!=="superuser");
   document.getElementById("staffLogin").classList.add("hidden");
   document.getElementById("staffPanel").classList.remove("hidden");
   renderPermissions();
@@ -676,9 +751,11 @@ async function staffLogout(){
   await supabaseClient.auth.signOut();
   staff=null;
   current=null;
+  document.getElementById("adminNavBtn").classList.add("hidden");
   document.getElementById("staffPanel").classList.add("hidden");
   document.getElementById("staffLogin").classList.remove("hidden");
   document.getElementById("staffPassword").value="";
+  showView("visitor");
 }
 function renderPermissions(){
   const roleLabel=staff.role==="superuser" ? "مدير النظام" : "موظف";
@@ -1157,6 +1234,87 @@ setInterval(()=>{
   if(document.getElementById("display").classList.contains("active")) renderDisplay();
   if(staff) refreshStaff();
 },2000);
+
+let adminUsers=[];
+
+function departmentLabel(value){
+  const map={
+    registration:"إدارة التسجيل",
+    records:"إدارة السجلات",
+    admissions:"إدارة القبول",
+    graduates:"إدارة الخريجين"
+  };
+  return map[value] || "—";
+}
+
+async function loadAdminUsers(){
+  if(!staff || staff.role!=="superuser") return;
+
+  const statusBox=document.getElementById("adminUsersStatus");
+  statusBox.textContent="جاري تحميل المستخدمين...";
+  statusBox.classList.remove("hidden");
+
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .select("id,username,full_name,role,department,active,created_at")
+    .order("full_name",{ascending:true});
+
+  if(error){
+    console.error("Admin profile list failed:", error);
+    statusBox.textContent=`تعذر تحميل المستخدمين: ${error.message}`;
+    document.getElementById("adminUsersTable").innerHTML="";
+    return;
+  }
+
+  adminUsers=data || [];
+  statusBox.classList.add("hidden");
+  renderAdminUsers();
+}
+
+function renderAdminUsers(){
+  const search=(document.getElementById("adminSearch")?.value || "").trim().toLowerCase();
+  const dept=document.getElementById("adminDeptFilter")?.value || "";
+  const role=document.getElementById("adminRoleFilter")?.value || "";
+  const status=document.getElementById("adminStatusFilter")?.value || "";
+
+  const filtered=adminUsers.filter(u=>{
+    const matchesSearch=!search ||
+      (u.full_name || "").toLowerCase().includes(search) ||
+      (u.username || "").toLowerCase().includes(search);
+
+    const matchesDept=!dept || u.department===dept;
+    const matchesRole=!role || u.role===role;
+    const matchesStatus=!status ||
+      (status==="active" && u.active===true) ||
+      (status==="inactive" && u.active===false);
+
+    return matchesSearch && matchesDept && matchesRole && matchesStatus;
+  });
+
+  const body=document.getElementById("adminUsersTable");
+  if(!filtered.length){
+    body.innerHTML=`<tr><td colspan="5" style="padding:24px;text-align:center;color:var(--muted)">لا توجد نتائج</td></tr>`;
+    return;
+  }
+
+  body.innerHTML=filtered.map(u=>`
+    <tr>
+      <td style="padding:12px;border-bottom:1px solid var(--border)"><b>${u.full_name || "—"}</b></td>
+      <td style="padding:12px;border-bottom:1px solid var(--border)" dir="ltr">${u.username || "—"}</td>
+      <td style="padding:12px;border-bottom:1px solid var(--border)">${departmentLabel(u.department)}</td>
+      <td style="padding:12px;border-bottom:1px solid var(--border)">
+        <span class="tag">${u.role==="superuser" ? "مدير النظام" : "موظف"}</span>
+      </td>
+      <td style="padding:12px;border-bottom:1px solid var(--border)">
+        <span class="tag" style="${u.active ? "" : "background:#fff1f2;color:#b42318"}">${u.active ? "نشط" : "موقوف"}</span>
+      </td>
+    </tr>
+  `).join("");
+}
+
+function adminAddUserPlaceholder(){
+  alert("سيتم تفعيل إضافة المستخدم في الخطوة التالية بعد إعداد إنشاء الحسابات الآمن.");
+}
 
 async function saveNewPassword(){
   const password=document.getElementById("newPassword").value;
