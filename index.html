@@ -271,7 +271,10 @@
           <h3 class="section-title" style="margin-bottom:4px">إدارة المستخدمين</h3>
           <div class="muted">عرض والبحث في حسابات الموظفين المسجلة بالنظام</div>
         </div>
-        <button class="btn primary" onclick="openAddUserForm()">+ إضافة مستخدم</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" onclick="openServiceManagement()">إدارة الخدمات</button>
+          <button class="btn primary" onclick="openAddUserForm()">+ إضافة مستخدم</button>
+        </div>
       </div>
 
       <div class="grid" style="grid-template-columns:2fr 1fr 1fr 1fr;margin-bottom:16px">
@@ -365,6 +368,129 @@
           <button id="createStaffBtn" class="btn primary" onclick="createStaffUser()">إنشاء المستخدم</button>
           <button class="btn" onclick="closeAddUserForm()">إلغاء</button>
         </div>
+      </div>
+
+      <div id="serviceManagementPanel" class="card hidden" style="box-shadow:none;margin:0 0 18px;padding:18px;background:#f8fafc">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+          <div>
+            <h4 style="margin:0 0 4px">إدارة الخدمات</h4>
+            <div class="muted">إضافة الخدمات وتعديلها وتفعيلها أو إيقافها</div>
+          </div>
+          <button class="btn" onclick="closeServiceManagement()">إغلاق</button>
+        </div>
+
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px">
+          <div class="field">
+            <label>الإدارة</label>
+            <select id="svcDept" onchange="serviceAdminRouteChanged()">
+              <option value="">اختر الإدارة</option>
+              <option value="registration">إدارة التسجيل</option>
+              <option value="records">إدارة السجلات</option>
+              <option value="admissions">إدارة القبول</option>
+              <option value="graduates">إدارة الخريجين</option>
+            </select>
+          </div>
+          <div class="field hidden" id="svcSectionWrap">
+            <label>القسم</label>
+            <select id="svcSection" onchange="serviceAdminRouteChanged()">
+              <option value="">اختر القسم</option>
+              <option value="reception">قسم الاستقبال</option>
+              <option value="activity">قسم نشاط الخريج</option>
+              <option value="graduation">قسم شؤون التخرج</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>اسم الخدمة</label>
+            <input id="svcName" placeholder="اسم الخدمة" />
+          </div>
+          <div class="field">
+            <label>ترتيب العرض</label>
+            <input id="svcSort" type="number" value="100" min="0" />
+          </div>
+        </div>
+
+        <div style="display:flex;gap:18px;flex-wrap:wrap;margin:8px 0 14px">
+          <label><input type="checkbox" id="svcCollege"> تتطلب اختيار الكلية</label>
+          <label><input type="checkbox" id="svcLetter"> تتطلب نطاق الحروف</label>
+        </div>
+
+        <div id="serviceAdminMessage" class="notice hidden"></div>
+        <div class="actions">
+          <button id="saveServiceBtn" class="btn primary" onclick="saveNewService()">إضافة الخدمة</button>
+        </div>
+
+        <div style="overflow:auto;margin-top:16px">
+          <table style="width:100%;border-collapse:collapse;min-width:850px">
+            <thead>
+              <tr>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">الإدارة</th>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">القسم</th>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">الخدمة</th>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">المسار</th>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">الحالة</th>
+                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">إجراء</th>
+              </tr>
+            </thead>
+            <tbody id="serviceAdminTable"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="userPermissionsPanel" class="card hidden" style="box-shadow:none;margin:0 0 18px;padding:18px;background:#f8fafc">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+          <div>
+            <h4 style="margin:0 0 4px">صلاحيات المستخدم</h4>
+            <div id="permUserName" class="muted"></div>
+          </div>
+          <button class="btn" onclick="closeUserPermissions()">إغلاق</button>
+        </div>
+
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px">
+          <div class="field">
+            <label>الإدارة</label>
+            <select id="permDept" onchange="renderPermissionBuilder()">
+              <option value="">اختر الإدارة</option>
+              <option value="registration">إدارة التسجيل</option>
+              <option value="records">إدارة السجلات</option>
+              <option value="admissions">إدارة القبول</option>
+              <option value="graduates">إدارة الخريجين</option>
+            </select>
+          </div>
+          <div class="field hidden" id="permSectionWrap">
+            <label>القسم</label>
+            <select id="permSection" onchange="renderPermissionBuilder()">
+              <option value="">اختر القسم</option>
+              <option value="reception">قسم الاستقبال</option>
+              <option value="activity">قسم نشاط الخريج</option>
+              <option value="graduation">قسم شؤون التخرج</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="permServicesWrap" class="hidden" style="margin-top:12px">
+          <b>الخدمات</b>
+          <div id="permServices" class="checklist" style="margin-top:8px"></div>
+        </div>
+
+        <div id="permCollegesWrap" class="hidden" style="margin-top:12px">
+          <b>الكليات</b>
+          <div id="permColleges" class="checklist" style="margin-top:8px"></div>
+        </div>
+
+        <div id="permRangesWrap" class="hidden" style="margin-top:12px">
+          <b>نطاق الحروف</b>
+          <div id="permRanges" style="margin-top:8px"></div>
+        </div>
+
+        <div id="permissionAdminMessage" class="notice hidden"></div>
+
+        <div class="actions">
+          <button class="btn primary" onclick="addSelectedPermissions()">إضافة الصلاحيات</button>
+          <button class="btn" onclick="clearAllUserPermissions()">مسح جميع الصلاحيات</button>
+        </div>
+
+        <h4 style="margin:18px 0 8px">الصلاحيات الحالية</h4>
+        <div id="currentUserPermissions"></div>
       </div>
 
       <div id="manageUserPanel" class="card hidden" style="box-shadow:none;margin:0 0 18px;padding:18px;background:#f8fafc">
@@ -538,7 +664,9 @@ const gradRanges = {
  "التربية":[["أ","ث"],["ج","ر"],["ز","ظ"],["ع","ق"],["ك","م"],["ن","ي"]]
 };
 
-let visitorState = {dept:null, section:null, service:null, college:null, letter:null};
+let visitorState = {dept:null, section:null, service:null, college:null, letter:null, serviceMeta:null};
+let serviceCatalog = [];
+let selectedPermissionUser = null;
 let staff = null;
 let current = null;
 
@@ -597,7 +725,7 @@ function allRouteOptions(){
 }
 
 function visitorHome(){
-  visitorState={dept:null,section:null,service:null,college:null,letter:null};
+  visitorState={dept:null,section:null,service:null,college:null,letter:null,serviceMeta:null};
   const root=document.getElementById("visitorRoot");
   root.innerHTML=`
     <div class="hero">
@@ -644,9 +772,40 @@ function currentConfig(){
   return departments[visitorState.dept];
 }
 
+function catalogServices(dept, section=null, includeInactive=false){
+  const rows=serviceCatalog.filter(s=>
+    s.department===dept &&
+    (s.section || null)===(section || null) &&
+    (includeInactive || s.active===true)
+  ).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0) || a.service_name.localeCompare(b.service_name,"ar"));
+
+  if(rows.length) return rows;
+
+  // Safe fallback to original embedded catalog.
+  if(dept==="graduates"){
+    const cfg=departments.graduates.sections[section];
+    return (cfg?.services || []).map((name,i)=>({
+      id:null, department:dept, section, service_name:name,
+      requires_college:!!cfg?.needsCollegeLetter,
+      requires_letter:!!cfg?.needsCollegeLetter,
+      active:true, sort_order:(i+1)*10
+    }));
+  }
+
+  const cfg=departments[dept];
+  return (cfg?.services || []).map((name,i)=>({
+    id:null, department:dept, section:null, service_name:name,
+    requires_college:dept==="records" && name==="معاملات الكليات",
+    requires_letter:false,
+    active:true, sort_order:(i+1)*10
+  }));
+}
+
 function renderServices(){
   const cfg=currentConfig();
   const deptName=visitorState.dept==="graduates" ? `إدارة الخريجين / ${cfg.name}` : departments[visitorState.dept].name;
+  const services=catalogServices(visitorState.dept, visitorState.section);
+
   const root=document.getElementById("visitorRoot");
   root.innerHTML=`
     <div class="breadcrumb">الرئيسية / ${deptName}</div>
@@ -654,22 +813,28 @@ function renderServices(){
       <h2 class="section-title">${deptName}</h2>
       <p class="muted">اختر الخدمة</p>
       <div class="grid">
-        ${cfg.services.map((s,i)=>`<div class="card choice" onclick="chooseService(${i})"><strong>${s}</strong><span>اضغط للمتابعة</span></div>`).join("")}
+        ${services.map((s,i)=>`<div class="card choice" onclick="chooseService(${i})"><strong>${s.service_name}</strong><span>اضغط للمتابعة</span></div>`).join("")}
       </div>
       <div class="actions"><button class="btn" onclick="${visitorState.dept==="graduates"?"renderGraduateSections()":"visitorHome()"}">رجوع</button></div>
     </div>`;
 }
 
 function chooseService(i){
-  const cfg=currentConfig();
-  visitorState.service=cfg.services[i];
+  const services=catalogServices(visitorState.dept, visitorState.section);
+  const svc=services[i];
+  if(!svc) return;
 
-  if(visitorState.dept==="records" && visitorState.service==="معاملات الكليات"){
-    renderRecordColleges(); return;
+  visitorState.service=svc.service_name;
+  visitorState.serviceMeta=svc;
+  visitorState.college=null;
+  visitorState.letter=null;
+
+  if(svc.requires_college){
+    if(visitorState.dept==="graduates") renderGradColleges();
+    else renderRecordColleges();
+    return;
   }
-  if(visitorState.dept==="graduates" && cfg.needsCollegeLetter){
-    renderGradColleges(); return;
-  }
+
   issueTicket();
 }
 
@@ -685,7 +850,11 @@ function renderRecordColleges(){
     <div class="actions"><button class="btn" onclick="renderServices()">رجوع</button></div>
    </div>`;
 }
-function selectRecordCollege(i){ visitorState.college=departments.records.colleges[i]; issueTicket(); }
+function selectRecordCollege(i){
+  visitorState.college=departments.records.colleges[i];
+  if(visitorState.serviceMeta?.requires_letter) renderLetters();
+  else issueTicket();
+}
 
 function renderGradColleges(){
   const root=document.getElementById("visitorRoot");
@@ -699,7 +868,11 @@ function renderGradColleges(){
     <div class="actions"><button class="btn" onclick="renderServices()">رجوع</button></div>
    </div>`;
 }
-function selectGradCollege(i){ visitorState.college=gradColleges[i]; renderLetters(); }
+function selectGradCollege(i){
+  visitorState.college=gradColleges[i];
+  if(visitorState.serviceMeta?.requires_letter) renderLetters();
+  else issueTicket();
+}
 
 function renderLetters(){
   const root=document.getElementById("visitorRoot");
@@ -739,7 +912,7 @@ async function issueTicket(){
   let prefix = visitorState.dept==="graduates" ? cfg.prefix : departments[visitorState.dept].prefix;
   const seq=getSeq(); seq[prefix]=(seq[prefix]||0)+1; saveSeq(seq);
   let range=null;
-  if(visitorState.dept==="graduates" && cfg.needsCollegeLetter){
+  if(visitorState.serviceMeta?.requires_letter && visitorState.college && visitorState.letter){
     range=findGradRange(visitorState.college,visitorState.letter);
   }
 
@@ -849,6 +1022,27 @@ async function staffLogin(){
     return;
   }
 
+  let centralPermissions=[];
+  const { data:permissionRows, error:permissionError } = await supabaseClient
+    .from("staff_permissions")
+    .select("department,section,college,letter_range,service_catalog(service_name)")
+    .eq("user_id",profile.id);
+
+  if(permissionError){
+    console.error("Central permissions read failed:", permissionError);
+  }else{
+    centralPermissions=(permissionRows || []).map(p=>{
+      const serviceName=p.service_catalog?.service_name;
+      if(!serviceName) return null;
+      let key=p.department;
+      if(p.section) key+=`|${p.section}`;
+      key+=`|${serviceName}`;
+      if(p.college) key+=`|${p.college}`;
+      if(p.letter_range) key+=`|${p.letter_range}`;
+      return key;
+    }).filter(Boolean);
+  }
+
   staff={
     userId:profile.id,
     username:profile.username,
@@ -856,7 +1050,9 @@ async function staffLogin(){
     role:profile.role,
     department:profile.department,
     counter,
-    permissions:JSON.parse(localStorage.getItem(`kuq_perm_${counter}`)||"[]")
+    permissions:centralPermissions.length
+      ? centralPermissions
+      : JSON.parse(localStorage.getItem(`kuq_perm_${counter}`)||"[]")
   };
 
   document.getElementById("adminNavBtn").classList.toggle("hidden", profile.role!=="superuser");
@@ -1356,6 +1552,420 @@ setInterval(()=>{
   if(staff) refreshStaff();
 },2000);
 
+async function loadServiceCatalog(){
+  const { data, error } = await supabaseClient
+    .from("service_catalog")
+    .select("id,department,section,service_name,requires_college,requires_letter,active,sort_order")
+    .order("sort_order",{ascending:true});
+
+  if(error){
+    console.error("Service catalog load failed:", error);
+    return false;
+  }
+
+  serviceCatalog=data || [];
+  return true;
+}
+
+function sectionLabel(value){
+  const map={
+    reception:"قسم الاستقبال",
+    activity:"قسم نشاط الخريج",
+    graduation:"قسم شؤون التخرج"
+  };
+  return map[value] || "—";
+}
+
+function serviceRouteRule(dept,section){
+  if(dept==="registration" || dept==="admissions") return {college:false,letter:false,locked:true};
+  if(dept==="records") return {college:null,letter:false,locked:false};
+  if(dept==="graduates" && section==="reception") return {college:false,letter:false,locked:true};
+  if(dept==="graduates" && ["activity","graduation"].includes(section)) return {college:true,letter:true,locked:true};
+  return {college:false,letter:false,locked:true};
+}
+
+async function openServiceManagement(){
+  document.getElementById("userPermissionsPanel").classList.add("hidden");
+  document.getElementById("manageUserPanel").classList.add("hidden");
+  document.getElementById("addUserPanel").classList.add("hidden");
+  document.getElementById("serviceManagementPanel").classList.remove("hidden");
+  await loadServiceCatalog();
+  renderServiceAdminTable();
+  serviceAdminRouteChanged();
+  document.getElementById("serviceManagementPanel").scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+function closeServiceManagement(){
+  document.getElementById("serviceManagementPanel").classList.add("hidden");
+}
+
+function serviceAdminRouteChanged(){
+  const dept=document.getElementById("svcDept").value;
+  const sectionWrap=document.getElementById("svcSectionWrap");
+  const sectionEl=document.getElementById("svcSection");
+
+  if(dept==="graduates"){
+    sectionWrap.classList.remove("hidden");
+  }else{
+    sectionWrap.classList.add("hidden");
+    sectionEl.value="";
+  }
+
+  const rule=serviceRouteRule(dept,sectionEl.value);
+  const college=document.getElementById("svcCollege");
+  const letter=document.getElementById("svcLetter");
+
+  if(dept==="records"){
+    college.disabled=false;
+    letter.checked=false;
+    letter.disabled=true;
+  }else{
+    college.checked=!!rule.college;
+    letter.checked=!!rule.letter;
+    college.disabled=true;
+    letter.disabled=true;
+  }
+}
+
+function renderServiceAdminTable(){
+  const body=document.getElementById("serviceAdminTable");
+  const rows=[...serviceCatalog].sort((a,b)=>
+    a.department.localeCompare(b.department) ||
+    String(a.section||"").localeCompare(String(b.section||"")) ||
+    (a.sort_order||0)-(b.sort_order||0)
+  );
+
+  if(!rows.length){
+    body.innerHTML=`<tr><td colspan="6" style="padding:20px;text-align:center" class="muted">لا توجد خدمات</td></tr>`;
+    return;
+  }
+
+  body.innerHTML=rows.map(s=>`
+    <tr>
+      <td style="padding:10px;border-bottom:1px solid var(--border)">${departmentLabel(s.department)}</td>
+      <td style="padding:10px;border-bottom:1px solid var(--border)">${sectionLabel(s.section)}</td>
+      <td style="padding:10px;border-bottom:1px solid var(--border)"><b>${s.service_name}</b></td>
+      <td style="padding:10px;border-bottom:1px solid var(--border)">
+        ${s.requires_college ? "كلية" : "خدمة"}
+        ${s.requires_letter ? " + نطاق الحروف" : ""}
+      </td>
+      <td style="padding:10px;border-bottom:1px solid var(--border)">
+        <span class="tag" style="${s.active?"":"background:#fff1f2;color:#b42318"}">${s.active?"نشطة":"موقوفة"}</span>
+      </td>
+      <td style="padding:10px;border-bottom:1px solid var(--border)">
+        <button class="btn" style="padding:7px 10px" onclick="toggleServiceActive(${s.id},${s.active?"false":"true"})">${s.active?"إيقاف":"تفعيل"}</button>
+      </td>
+    </tr>
+  `).join("");
+}
+
+async function saveNewService(){
+  const dept=document.getElementById("svcDept").value;
+  const section=dept==="graduates" ? document.getElementById("svcSection").value : null;
+  const service_name=document.getElementById("svcName").value.trim();
+  const sort_order=Number(document.getElementById("svcSort").value || 100);
+  const msg=document.getElementById("serviceAdminMessage");
+
+  if(!dept || !service_name || (dept==="graduates" && !section)){
+    msg.textContent="يرجى استكمال الإدارة والقسم - عند الحاجة - واسم الخدمة.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  const rule=serviceRouteRule(dept,section);
+  const requires_college = dept==="records"
+    ? document.getElementById("svcCollege").checked
+    : !!rule.college;
+  const requires_letter = !!rule.letter;
+
+  const { error } = await supabaseClient.from("service_catalog").insert({
+    department:dept,
+    section:section || null,
+    service_name,
+    requires_college,
+    requires_letter,
+    active:true,
+    sort_order
+  });
+
+  if(error){
+    console.error("Service insert failed:",error);
+    msg.textContent=error.code==="23505" ? "هذه الخدمة موجودة مسبقاً في المسار المحدد." : `تعذر إضافة الخدمة: ${error.message}`;
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  msg.textContent="تمت إضافة الخدمة بنجاح.";
+  msg.classList.remove("hidden");
+  document.getElementById("svcName").value="";
+  await loadServiceCatalog();
+  renderServiceAdminTable();
+}
+
+async function toggleServiceActive(id,newActive){
+  const { error } = await supabaseClient
+    .from("service_catalog")
+    .update({active:newActive})
+    .eq("id",id);
+
+  if(error){
+    alert(`تعذر تحديث الخدمة: ${error.message}`);
+    return;
+  }
+
+  await loadServiceCatalog();
+  renderServiceAdminTable();
+}
+
+async function openUserPermissions(id){
+  const u=getAdminUserById(id);
+  if(!u) return;
+
+  selectedPermissionUser=u;
+  document.getElementById("serviceManagementPanel").classList.add("hidden");
+  document.getElementById("manageUserPanel").classList.add("hidden");
+  document.getElementById("addUserPanel").classList.add("hidden");
+  document.getElementById("userPermissionsPanel").classList.remove("hidden");
+  document.getElementById("permUserName").textContent=u.full_name || u.username || "";
+  document.getElementById("permDept").value="";
+  document.getElementById("permSection").value="";
+  document.getElementById("permSectionWrap").classList.add("hidden");
+  document.getElementById("permServicesWrap").classList.add("hidden");
+  document.getElementById("permCollegesWrap").classList.add("hidden");
+  document.getElementById("permRangesWrap").classList.add("hidden");
+
+  await loadServiceCatalog();
+  await loadCurrentUserPermissions();
+  document.getElementById("userPermissionsPanel").scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+function closeUserPermissions(){
+  document.getElementById("userPermissionsPanel").classList.add("hidden");
+  selectedPermissionUser=null;
+}
+
+function renderPermissionBuilder(){
+  const dept=document.getElementById("permDept").value;
+  const sectionEl=document.getElementById("permSection");
+  const sectionWrap=document.getElementById("permSectionWrap");
+  const servicesWrap=document.getElementById("permServicesWrap");
+  const collegesWrap=document.getElementById("permCollegesWrap");
+  const rangesWrap=document.getElementById("permRangesWrap");
+
+  if(dept==="graduates") sectionWrap.classList.remove("hidden");
+  else{
+    sectionWrap.classList.add("hidden");
+    sectionEl.value="";
+  }
+
+  const section=dept==="graduates" ? sectionEl.value : null;
+  if(!dept || (dept==="graduates" && !section)){
+    servicesWrap.classList.add("hidden");
+    collegesWrap.classList.add("hidden");
+    rangesWrap.classList.add("hidden");
+    return;
+  }
+
+  const services=catalogServices(dept,section);
+  servicesWrap.classList.remove("hidden");
+  document.getElementById("permServices").innerHTML=services.map(s=>`
+    <label class="check">
+      <input type="checkbox" class="perm-service" data-id="${s.id||""}" data-college="${s.requires_college}" data-letter="${s.requires_letter}" onchange="permissionSelectionChanged()">
+      ${s.service_name}
+    </label>
+  `).join("");
+
+  permissionSelectionChanged();
+}
+
+function permissionSelectionChanged(){
+  const dept=document.getElementById("permDept").value;
+  const section=document.getElementById("permSection").value;
+  const selected=[...document.querySelectorAll(".perm-service:checked")];
+  const needsCollege=selected.some(x=>x.dataset.college==="true");
+  const needsLetter=selected.some(x=>x.dataset.letter==="true");
+
+  const collegesWrap=document.getElementById("permCollegesWrap");
+  const rangesWrap=document.getElementById("permRangesWrap");
+
+  if(needsCollege){
+    collegesWrap.classList.remove("hidden");
+    const colleges=dept==="records" ? departments.records.colleges : gradColleges;
+    document.getElementById("permColleges").innerHTML=colleges.map(c=>`
+      <label class="check"><input type="checkbox" class="perm-college" value="${encodeURIComponent(c)}" onchange="permissionCollegeChanged()"> ${c}</label>
+    `).join("");
+  }else{
+    collegesWrap.classList.add("hidden");
+    document.getElementById("permColleges").innerHTML="";
+  }
+
+  if(!needsLetter){
+    rangesWrap.classList.add("hidden");
+    document.getElementById("permRanges").innerHTML="";
+  }else{
+    permissionCollegeChanged();
+  }
+}
+
+function permissionCollegeChanged(){
+  const selectedServices=[...document.querySelectorAll(".perm-service:checked")];
+  const needsLetter=selectedServices.some(x=>x.dataset.letter==="true");
+  const colleges=[...document.querySelectorAll(".perm-college:checked")].map(x=>decodeURIComponent(x.value));
+  const wrap=document.getElementById("permRangesWrap");
+
+  if(!needsLetter || !colleges.length){
+    wrap.classList.add("hidden");
+    document.getElementById("permRanges").innerHTML="";
+    return;
+  }
+
+  wrap.classList.remove("hidden");
+  document.getElementById("permRanges").innerHTML=colleges.map(c=>`
+    <div class="card" style="box-shadow:none;padding:12px;margin-bottom:8px">
+      <b>${c}</b>
+      <div class="checklist" style="margin-top:8px">
+        ${(gradRanges[c]||[["أ","ي"]]).map(r=>{
+          const label=`${r[0]}–${r[1]}`;
+          return `<label class="check"><input type="checkbox" class="perm-range" data-college="${encodeURIComponent(c)}" value="${encodeURIComponent(label)}"> ${label}</label>`;
+        }).join("")}
+      </div>
+    </div>
+  `).join("");
+}
+
+async function addSelectedPermissions(){
+  if(!selectedPermissionUser) return;
+
+  const dept=document.getElementById("permDept").value;
+  const section=dept==="graduates" ? document.getElementById("permSection").value : null;
+  const selectedServices=[...document.querySelectorAll(".perm-service:checked")];
+  const msg=document.getElementById("permissionAdminMessage");
+
+  if(!dept || (dept==="graduates" && !section) || !selectedServices.length){
+    msg.textContent="يرجى اختيار الإدارة والقسم - عند الحاجة - وخدمة واحدة على الأقل.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  const colleges=[...document.querySelectorAll(".perm-college:checked")].map(x=>decodeURIComponent(x.value));
+  const ranges=[...document.querySelectorAll(".perm-range:checked")].map(x=>({
+    college:decodeURIComponent(x.dataset.college),
+    range:decodeURIComponent(x.value)
+  }));
+
+  const rows=[];
+
+  for(const node of selectedServices){
+    const serviceId=Number(node.dataset.id);
+    const needsCollege=node.dataset.college==="true";
+    const needsLetter=node.dataset.letter==="true";
+
+    if(!serviceId){
+      msg.textContent="تعذر تحديد الخدمة في قاعدة البيانات. تأكد من تشغيل ملف SQL أولاً.";
+      msg.classList.remove("hidden");
+      return;
+    }
+
+    if(!needsCollege){
+      rows.push({user_id:selectedPermissionUser.id,service_id:serviceId,department:dept,section:section||null,college:null,letter_range:null});
+      continue;
+    }
+
+    if(!colleges.length){
+      msg.textContent="يرجى اختيار كلية واحدة على الأقل للخدمات التي تتطلب كلية.";
+      msg.classList.remove("hidden");
+      return;
+    }
+
+    if(!needsLetter){
+      colleges.forEach(c=>rows.push({user_id:selectedPermissionUser.id,service_id:serviceId,department:dept,section:section||null,college:c,letter_range:null}));
+      continue;
+    }
+
+    for(const c of colleges){
+      const cr=ranges.filter(r=>r.college===c);
+      if(!cr.length){
+        msg.textContent=`يرجى اختيار نطاق حروف واحد على الأقل للكلية: ${c}`;
+        msg.classList.remove("hidden");
+        return;
+      }
+      cr.forEach(r=>rows.push({user_id:selectedPermissionUser.id,service_id:serviceId,department:dept,section:section||null,college:c,letter_range:r.range}));
+    }
+  }
+
+  const { error } = await supabaseClient.from("staff_permissions").insert(rows);
+  if(error){
+    console.error("Permission insert failed:",error);
+    msg.textContent=`تعذر حفظ الصلاحيات: ${error.message}`;
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  msg.textContent="تمت إضافة الصلاحيات بنجاح.";
+  msg.classList.remove("hidden");
+  await loadCurrentUserPermissions();
+}
+
+async function loadCurrentUserPermissions(){
+  if(!selectedPermissionUser) return;
+
+  const { data, error } = await supabaseClient
+    .from("staff_permissions")
+    .select("id,department,section,college,letter_range,service_catalog(service_name)")
+    .eq("user_id",selectedPermissionUser.id)
+    .order("id",{ascending:true});
+
+  const box=document.getElementById("currentUserPermissions");
+  if(error){
+    box.innerHTML=`<div class="notice">تعذر تحميل الصلاحيات: ${error.message}</div>`;
+    return;
+  }
+
+  const rows=data || [];
+  if(!rows.length){
+    box.innerHTML=`<div class="muted">لا توجد صلاحيات مركزية لهذا المستخدم بعد.</div>`;
+    return;
+  }
+
+  box.innerHTML=rows.map(p=>`
+    <div class="qitem">
+      <div>
+        <b>${departmentLabel(p.department)}</b>
+        ${p.section?` — ${sectionLabel(p.section)}`:""}
+        <br><small>${p.service_catalog?.service_name || "—"}${p.college?` — ${p.college}`:""}${p.letter_range?` — ${p.letter_range}`:""}</small>
+      </div>
+      <button class="btn" style="padding:7px 10px" onclick="removeUserPermission(${p.id})">حذف</button>
+    </div>
+  `).join("");
+}
+
+async function removeUserPermission(id){
+  if(!confirm("حذف هذه الصلاحية؟")) return;
+  const { error } = await supabaseClient.from("staff_permissions").delete().eq("id",id);
+  if(error){
+    alert(`تعذر حذف الصلاحية: ${error.message}`);
+    return;
+  }
+  await loadCurrentUserPermissions();
+}
+
+async function clearAllUserPermissions(){
+  if(!selectedPermissionUser) return;
+  if(!confirm(`مسح جميع صلاحيات «${selectedPermissionUser.full_name || selectedPermissionUser.username}»؟`)) return;
+
+  const { error } = await supabaseClient
+    .from("staff_permissions")
+    .delete()
+    .eq("user_id",selectedPermissionUser.id);
+
+  if(error){
+    alert(`تعذر مسح الصلاحيات: ${error.message}`);
+    return;
+  }
+
+  await loadCurrentUserPermissions();
+}
+
 let adminUsers=[];
 
 function departmentLabel(value){
@@ -1431,6 +2041,7 @@ function renderAdminUsers(){
       </td>
       <td style="padding:12px;border-bottom:1px solid var(--border)">
         <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn" style="padding:7px 10px" onclick="openUserPermissions('${u.id}')">الصلاحيات</button>
           <button class="btn" style="padding:7px 10px" onclick="openEditUser('${u.id}')">تعديل</button>
           <button class="btn" style="padding:7px 10px" onclick="openPasswordReset('${u.id}')">كلمة المرور</button>
           <button class="btn" style="padding:7px 10px" onclick="toggleUserStatus('${u.id}', ${u.active ? "false" : "true"})">${u.active ? "إيقاف" : "تفعيل"}</button>
@@ -1859,7 +2470,7 @@ async function handleRecoveryMode(){
 (async ()=>{
   const recovery=await handleRecoveryMode();
   if(!recovery){
-    visitorHome();
+    loadServiceCatalog().finally(()=>visitorHome());
     renderDisplay();
   }
 })();
