@@ -2105,13 +2105,32 @@ async function renderDisplay(){
   const latestBox=document.getElementById("latestCall");
   const historyBox=document.getElementById("callHistory");
 
-  // Always refresh the centrally managed screen configuration.
+  // Refresh both the internal display configuration and the public
+  // location list. The selector is location-based; display_configs remain internal.
   await loadHallsAndDisplays();
+  if(!(serviceLocations || []).length){
+    await loadServiceLocations();
+  }
 
   const cfg=displayConfigs.find(x=>x.slug===activeDisplaySlug && x.active) || null;
 
+  const activeLocations=(serviceLocations || []).filter(
+    l=>l.active && l.display_configs?.active
+  );
+
+  if(!currentServiceLocation && activeDisplaySlug){
+    currentServiceLocation=activeLocations.find(
+      l=>l.display_configs?.slug===activeDisplaySlug
+    ) || null;
+  }
+
+  const selectedLocationSlug=currentServiceLocation?.slug || "";
+
   selector.innerHTML=`<option value="">اختر شاشة النداء</option>` +
-    displayConfigs.filter(x=>x.active).map(x=>`<option value="${x.slug}" ${x.slug===activeDisplaySlug?"selected":""}>${x.name}</option>`).join("");
+    activeLocations.map(l=>`
+      <option value="${l.slug}" ${l.slug===selectedLocationSlug?"selected":""}>
+        ${l.name}
+      </option>`).join("");
 
   if(!cfg){
     title.textContent="الرجاء اختيار شاشة النداء";
@@ -2171,13 +2190,23 @@ async function renderDisplay(){
   }).join("");
 }
 
-function selectPublicDisplay(slug){
-  activeDisplaySlug=slug || null;
-  if(slug){
-    const url=new URL(window.location.href);
-    url.searchParams.set("display",slug);
-    window.history.replaceState({},document.title,url.toString());
+function selectPublicDisplay(locationSlug){
+  const location=(serviceLocations || []).find(
+    l=>l.slug===locationSlug && l.active && l.display_configs?.active
+  ) || null;
+
+  currentServiceLocation=location;
+  activeDisplaySlug=location?.display_configs?.slug || null;
+
+  const url=new URL(window.location.href);
+
+  if(location){
+    url.searchParams.set("display",location.slug);
+  }else{
+    url.searchParams.delete("display");
   }
+
+  window.history.replaceState({},document.title,url.toString());
   renderDisplay();
 }
 
