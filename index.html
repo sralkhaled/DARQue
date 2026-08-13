@@ -2530,6 +2530,40 @@ function loadPersistedVisitorTicket(locationSlug){
   }
 }
 
+async function applyDisplayUrl(){
+  const slug=new URL(window.location.href).searchParams.get("display");
+  if(!slug) return false;
+
+  // Dedicated physical-screen mode.
+  hideSpecialModeChrome();
+
+  const displayControlBar=document.getElementById("displayControlBar");
+  if(displayControlBar) displayControlBar.classList.add("hidden");
+
+  // Public screen links use the service-location slug, e.g. ?display=hall1.
+  // Resolve that location to its linked internal display config.
+  const location=(serviceLocations || []).find(
+    l=>l.slug===slug && l.active
+  ) || null;
+
+  if(location?.display_configs?.slug){
+    currentServiceLocation=location;
+    activeDisplaySlug=location.display_configs.slug;
+  }else{
+    // Backward compatibility for an old/internal display slug.
+    currentServiceLocation=null;
+    activeDisplaySlug=slug;
+  }
+
+  // A physical display must never inherit a visitor's personal ticket state.
+  visitorIssuedTicket=null;
+  visitorState.ticket=null;
+
+  showView("display");
+  await renderDisplay();
+  return true;
+}
+
 async function resolveLocationFromUrl(){
   const slug=new URL(window.location.href).searchParams.get("location"); if(!slug)return false;
   await loadServiceLocations();
