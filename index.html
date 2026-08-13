@@ -378,6 +378,10 @@
         <div class="muted" style="margin-top:8px">
           سيتم إنشاء وربط شاشة النداء الخاصة بهذا الموقع تلقائياً.
         </div>
+        <label class="check" style="margin-top:12px;display:inline-flex">
+          <input id="locationRequiresCounter" type="checkbox" checked>
+          <span>الموقع يستخدم كاونترات فعلية</span>
+        </label>
 
         <div class="field" style="margin-top:16px">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
@@ -2357,6 +2361,8 @@ function resetServiceLocationForm(){
   document.getElementById("locationName").value="";
   document.getElementById("locationSlug").value="";
   document.getElementById("locationSort").value="100";
+  const physical=document.getElementById("locationRequiresCounter");
+  if(physical) physical.checked=true;
   renderLocationDepartmentsChecklist([]);
   const selectAll=document.getElementById("locationSelectAllDepartments");
   if(selectAll) selectAll.checked=false;
@@ -2380,6 +2386,18 @@ function editServiceLocation(id){
   document.getElementById("locationName").value=l.name || "";
   document.getElementById("locationSlug").value=l.slug || "";
   document.getElementById("locationSort").value=l.sort_order ?? 100;
+
+  const linkedDisplay=(displayConfigs || []).find(
+    d=>Number(d.id)===Number(l.display_id)
+  );
+  const physical=document.getElementById("locationRequiresCounter");
+  if(physical){
+    physical.checked=!!(
+      linkedDisplay?.hall_id ||
+      (Array.isArray(linkedDisplay?.counter_numbers) && linkedDisplay.counter_numbers.length)
+    );
+  }
+
   renderLocationDepartmentsChecklist(
     (l.service_location_departments || []).map(x=>x.department)
   );
@@ -2428,18 +2446,23 @@ function automaticDisplaySlug(locationSlug){
   return `location-${locationSlug}-screen`;
 }
 
-function matchingHallForLocation(name,slug){
-  const normalizedName=String(name||"").trim();
-  return (halls || []).find(h=>
-    h.active !== false &&
-    (
-      h.slug===slug ||
-      String(h.name||"").trim()===normalizedName
-    )
-  ) || null;
+async function ensureLocationHall(name,slug,sortOrder){
+  const existing=(halls || []).find(h=>h.slug===slug) || null;
+  if(existing) return existing;
+
+  const {data,error}=await supabaseClient.rpc("ensure_location_hall",{
+    p_name:name,
+    p_slug:slug,
+    p_sort_order:Number(sortOrder || 100)
+  });
+
+  if(error) throw error;
+
+  await loadHallsAndDisplays();
+  return (halls || []).find(h=>Number(h.id)===Number(data) || h.slug===slug) || null;
 }
 
-async function ensureLocationDisplay({name,slug,existingDisplayId=null}){
+async function ensureLocationDisplay({name,slug,sortOrder=100,requiresCounter=true,existingDisplayId=null}){
   const displayName=automaticDisplayName(name);
 
   // Existing locations keep their current internal display record so
@@ -2450,9 +2473,20 @@ async function ensureLocationDisplay({name,slug,existingDisplayId=null}){
     );
 
     if(existing){
+      let hallId=existing.hall_id || null;
+
+      if(requiresCounter && !hallId){
+        const hall=await ensureLocationHall(name,slug,sortOrder);
+        hallId=hall?.id || null;
+      }
+
       const {error}=await supabaseClient
         .from("display_configs")
-        .update({name:displayName,active:true})
+        .update({
+          name:displayName,
+          hall_id:requiresCounter ? hallId : null,
+          active:true
+        })
         .eq("id",existingDisplayId);
 
       if(error) throw error;
@@ -2463,7 +2497,9 @@ async function ensureLocationDisplay({name,slug,existingDisplayId=null}){
   // New locations automatically get their own internal display.
   // If the location matches an existing physical hall by slug or name,
   // inherit that hall so counter selection remains automatic.
-  const hall=matchingHallForLocation(name,slug);
+  const hall=requiresCounter
+    ? await ensureLocationHall(name,slug,sortOrder)
+    : null;
   const displaySlug=automaticDisplaySlug(slug);
 
   const existingAuto=(displayConfigs || []).find(d=>d.slug===displaySlug);
@@ -2504,6 +2540,7 @@ async function saveServiceLocation(){
   const name=document.getElementById("locationName").value.trim();
   const slug=normalizeSlug(document.getElementById("locationSlug").value);
   const sort_order=Number(document.getElementById("locationSort").value||100);
+  const requiresCounter=!!document.getElementById("locationRequiresCounter")?.checked;
   const departments=selectedLocationDepartments();
   const msg=document.getElementById("locationAdminMessage");
 
@@ -2528,6 +2565,8 @@ async function saveServiceLocation(){
     const displayId=await ensureLocationDisplay({
       name,
       slug,
+      sortOrder:sort_order,
+      requiresCounter,
       existingDisplayId:existingLocation?.display_id || null
     });
 
@@ -2558,7 +2597,7 @@ async function saveServiceLocation(){
     await syncLocationDepartments(locationId,departments);
 
     msg.textContent=editingServiceLocationId
-      ? "تم حفظ تعديل الموقع والإدارات وشاشة النداء."
+      ? requiresCounter ? "تم حفظ الموقع وربطه بقاعة الكاونترات." : "تم حفظ الموقع دون كاونتر فعلي."
       : "تمت إضافة الموقع وإنشاء شاشة النداء تلقائياً.";
     msg.classList.remove("hidden");
 
