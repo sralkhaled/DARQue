@@ -254,6 +254,7 @@
           <div class="muted">عرض والبحث في حسابات الموظفين المسجلة بالنظام</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" onclick="openServiceLocationManagement()">مواقع الخدمة / صفحات QR</button>
           <button class="btn" onclick="openDepartmentManagement()">إدارة الإدارات</button>
           <button class="btn" onclick="openHallManagement()">إدارة القاعات</button>
           <button class="btn" onclick="openDisplayManagement()">إدارة شاشات النداء</button>
@@ -353,6 +354,35 @@
           <button id="createStaffBtn" class="btn primary" onclick="createStaffUser()">إنشاء المستخدم</button>
           <button class="btn" onclick="closeAddUserForm()">إلغاء</button>
         </div>
+      </div>
+
+      <div id="serviceLocationManagementPanel" class="card hidden" style="box-shadow:none;margin:0 0 18px;padding:18px;background:#f8fafc">
+        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div><h4 style="margin:0">مواقع الخدمة / صفحات QR</h4><div class="muted">ربط كل موقع بخدماته وشاشة النداء الخاصة به</div></div>
+          <button class="btn" onclick="closeServiceLocationManagement()">إغلاق</button>
+        </div>
+        <div class="grid" style="grid-template-columns:2fr 1.4fr 2fr 1fr;gap:12px;margin-top:14px">
+          <div class="field"><label>اسم الموقع</label><input id="locationName" placeholder="مثال: صالة ١ أو مكتب العميد"></div>
+          <div class="field"><label>رمز الرابط</label><input id="locationSlug" dir="ltr" placeholder="hall1"></div>
+          <div class="field"><label>شاشة النداء</label><select id="locationDisplay"></select></div>
+          <div class="field"><label>ترتيب العرض</label><input id="locationSort" type="number" value="100"></div>
+        </div>
+        <div id="locationAdminMessage" class="notice hidden"></div>
+        <div class="actions"><button class="btn primary" onclick="saveServiceLocation()">إضافة الموقع</button></div>
+        <div style="overflow:auto;margin-top:18px"><table style="width:100%;border-collapse:collapse;min-width:850px">
+          <thead><tr><th>الموقع</th><th>شاشة النداء</th><th>الخدمات</th><th>الحالة</th><th>إجراء</th></tr></thead>
+          <tbody id="locationAdminTable"></tbody>
+        </table></div>
+      </div>
+
+      <div id="locationServicesPanel" class="card hidden" style="box-shadow:none;margin:0 0 18px;padding:18px;background:#fff">
+        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div><h4 id="locationServicesTitle" style="margin:0">خدمات الموقع</h4><div class="muted">حدد الخدمات التي ستظهر للمراجع</div></div>
+          <button class="btn" onclick="document.getElementById('locationServicesPanel').classList.add('hidden')">إغلاق</button>
+        </div>
+        <div style="margin:14px 0"><label class="check"><input type="checkbox" id="locationSelectAllServices" onchange="toggleAllLocationServices(this.checked)"> تحديد جميع الخدمات</label></div>
+        <div id="locationServicesChecklist" class="checklist"></div>
+        <div class="actions"><button class="btn primary" onclick="saveLocationServices()">حفظ الخدمات</button></div>
       </div>
 
       <div id="departmentManagementPanel" class="card hidden" style="box-shadow:none;margin:0 0 18px;padding:18px;background:#f8fafc">
@@ -860,6 +890,10 @@ const gradRanges = {
 let visitorState = {dept:null, section:null, service:null, college:null, letter:null, serviceMeta:null};
 let serviceCatalog = [];
 let departmentCatalog = [];
+let serviceLocations=[];
+let currentServiceLocation=null;
+let selectedLocationAdmin=null;
+let visitorIssuedTicket=null;
 let halls = [];
 let displayConfigs = [];
 let activeDisplaySlug = null;
@@ -1192,6 +1226,11 @@ async function issueTicket(){
       ${range?`<div class="muted">نطاق الحروف: ${range}</div>`:""}
       <div class="actions"><button class="btn primary" onclick="visitorHome()">إنهاء</button></div>
     </div>`;
+  if(currentServiceLocation){
+    visitorIssuedTicket=visitorState.ticket || visitorIssuedTicket;
+    setTimeout(()=>showLocationDisplayAfterTicket(visitorIssuedTicket),700);
+  }
+
 }
 function showIssuedTicket(t){
   const root=document.getElementById("visitorRoot");
@@ -2041,6 +2080,12 @@ async function renderDisplay(){
   const filtered=data || [];
   const latest=filtered[0];
 
+  document.querySelectorAll(".visitor-own-ticket").forEach(el=>el.remove());
+  const ownTicketNumber=visitorState?.ticket?.number || visitorState?.ticket?.ticket_number || visitorIssuedTicket?.number || visitorIssuedTicket?.ticket_number || null;
+  if(ownTicketNumber){
+    title.insertAdjacentHTML("afterend",`<div class="notice visitor-own-ticket" style="max-width:900px;margin:0 auto 16px;text-align:center;font-size:20px">رقم انتظارك: <b style="font-size:28px">${ownTicketNumber}</b></div>`);
+  }
+
   if(!latest){
     latestBox.innerHTML=`<div class="call-card" style="grid-column:1/-1"><div class="muted">بانتظار أول نداء</div></div>`;
   }else{
@@ -2073,6 +2118,124 @@ setInterval(()=>{
   if(document.getElementById("display").classList.contains("active")) renderDisplay();
   if(staff) refreshStaff();
 },2000);
+
+async function loadServiceLocations(){
+  const {data,error}=await supabaseClient.from("service_locations")
+    .select("id,name,slug,display_id,active,sort_order,display_configs(id,name,slug,active),service_location_services(service_id)")
+    .order("sort_order",{ascending:true});
+  if(error){ console.error(error); serviceLocations=[]; return false; }
+  serviceLocations=data||[];
+  const el=document.getElementById("locationDisplay");
+  if(el) el.innerHTML=`<option value="">اختر شاشة النداء</option>`+(displayConfigs||[]).filter(d=>d.active).map(d=>`<option value="${d.id}">${d.name}</option>`).join("");
+  return true;
+}
+
+function serviceLocationUrl(slug){
+  const url=new URL(window.location.href); url.search=""; url.hash=""; url.searchParams.set("location",slug); return url.toString();
+}
+async function copyServiceLocationUrl(slug){
+  const url=serviceLocationUrl(slug);
+  try{ await navigator.clipboard.writeText(url); alert("تم نسخ رابط صفحة الموقع."); }catch{ prompt("رابط صفحة الموقع:",url); }
+}
+async function openServiceLocationManagement(){
+  hideAdminSubpanels("serviceLocationManagementPanel");
+  document.getElementById("serviceLocationManagementPanel").classList.remove("hidden");
+  await Promise.all([loadHallsAndDisplays(),loadServiceLocations(),loadServiceCatalog()]);
+  renderServiceLocationAdminTable();
+}
+function closeServiceLocationManagement(){
+  document.getElementById("serviceLocationManagementPanel").classList.add("hidden");
+  document.getElementById("locationServicesPanel").classList.add("hidden");
+}
+async function saveServiceLocation(){
+  const name=document.getElementById("locationName").value.trim();
+  const slug=normalizeSlug(document.getElementById("locationSlug").value);
+  const display_id=Number(document.getElementById("locationDisplay").value||0)||null;
+  const sort_order=Number(document.getElementById("locationSort").value||100);
+  const msg=document.getElementById("locationAdminMessage");
+  if(!name||!slug||!display_id){ msg.textContent="يرجى استكمال اسم الموقع ورمز الرابط وشاشة النداء."; msg.classList.remove("hidden"); return; }
+  const {error}=await supabaseClient.from("service_locations").insert({name,slug,display_id,active:true,sort_order});
+  if(error){ msg.textContent=error.message; msg.classList.remove("hidden"); return; }
+  msg.textContent="تمت إضافة الموقع."; msg.classList.remove("hidden");
+  await loadServiceLocations(); renderServiceLocationAdminTable();
+}
+function renderServiceLocationAdminTable(){
+  const body=document.getElementById("locationAdminTable");
+  body.innerHTML=(serviceLocations||[]).map(l=>`<tr>
+    <td><b>${l.name}</b><br><small dir="ltr">${l.slug}</small></td>
+    <td>${l.display_configs?.name||"—"}</td>
+    <td>${(l.service_location_services||[]).length} خدمة</td>
+    <td>${l.active?"نشط":"موقوف"}</td>
+    <td><button class="btn" onclick="openLocationServices(${l.id})">الخدمات</button>
+    <button class="btn" onclick="copyServiceLocationUrl('${l.slug}')">نسخ رابط QR</button>
+    <button class="btn" onclick="toggleServiceLocation(${l.id},${l.active?"false":"true"})">${l.active?"إيقاف":"تفعيل"}</button></td>
+  </tr>`).join("");
+}
+async function toggleServiceLocation(id,active){
+  await supabaseClient.from("service_locations").update({active}).eq("id",id);
+  await loadServiceLocations(); renderServiceLocationAdminTable();
+}
+async function openLocationServices(id){
+  selectedLocationAdmin=serviceLocations.find(l=>Number(l.id)===Number(id)); if(!selectedLocationAdmin)return;
+  document.getElementById("locationServicesPanel").classList.remove("hidden");
+  document.getElementById("locationServicesTitle").textContent=`خدمات ${selectedLocationAdmin.name}`;
+  const selected=new Set((selectedLocationAdmin.service_location_services||[]).map(x=>Number(x.service_id)));
+  document.getElementById("locationServicesChecklist").innerHTML=serviceCatalog.filter(s=>s.active).map(s=>`
+    <label class="check"><input class="location-service-checkbox" type="checkbox" value="${s.id}" ${selected.has(Number(s.id))?"checked":""}>
+    ${departmentLabel(s.department)}${s.section?` — ${sectionLabel(s.section)}`:""} — ${s.service_name}</label>`).join("");
+}
+function toggleAllLocationServices(v){ document.querySelectorAll(".location-service-checkbox").forEach(x=>x.checked=v); }
+async function saveLocationServices(){
+  if(!selectedLocationAdmin)return;
+  const ids=[...document.querySelectorAll(".location-service-checkbox:checked")].map(x=>Number(x.value));
+  const {error:e1}=await supabaseClient.from("service_location_services").delete().eq("location_id",selectedLocationAdmin.id);
+  if(e1){alert(e1.message);return;}
+  if(ids.length){
+    const {error:e2}=await supabaseClient.from("service_location_services").insert(ids.map((service_id,i)=>({location_id:selectedLocationAdmin.id,service_id,sort_order:(i+1)*10})));
+    if(e2){alert(e2.message);return;}
+  }
+  alert("تم حفظ خدمات الموقع.");
+  await loadServiceLocations(); renderServiceLocationAdminTable();
+}
+async function resolveLocationFromUrl(){
+  const slug=new URL(window.location.href).searchParams.get("location"); if(!slug)return false;
+  await loadServiceLocations();
+  currentServiceLocation=serviceLocations.find(l=>l.slug===slug&&l.active)||null;
+  if(!currentServiceLocation)return false;
+  renderLocationVisitorHome(); return true;
+}
+function locationServices(){
+  const ids=new Set((currentServiceLocation?.service_location_services||[]).map(x=>Number(x.service_id)));
+  return serviceCatalog.filter(s=>s.active&&ids.has(Number(s.id)));
+}
+function renderLocationVisitorHome(){
+  if(!currentServiceLocation)return;
+  showView("visitor");
+  document.querySelectorAll(".top-actions,.nav-actions,#topActions").forEach(el=>el.classList.add("hidden"));
+  const vc=document.getElementById("visitorContent"); if(!vc)return;
+  const services=locationServices(), byDept={}; services.forEach(s=>(byDept[s.department]||=[]).push(s));
+  vc.innerHTML=`<div class="hero"><h2>${currentServiceLocation.name}</h2><p>اختر الخدمة المطلوبة</p></div>
+  <div class="grid choices">${Object.entries(byDept).map(([dept,rows])=>{
+    if(rows.length===1){ const s=rows[0]; return `<div class="card choice" onclick="chooseLocationService(${s.id})"><strong>${s.service_name}</strong></div>`; }
+    return `<div class="card choice" onclick="openLocationDepartment('${dept}')"><strong>${departmentLabel(dept)}</strong><span>${rows.length} خدمات</span></div>`;
+  }).join("")}</div>`;
+}
+function openLocationDepartment(dept){
+  const rows=locationServices().filter(s=>s.department===dept),vc=document.getElementById("visitorContent"); if(!vc)return;
+  vc.innerHTML=`<button class="btn back" onclick="renderLocationVisitorHome()">رجوع</button><div class="hero"><h2>${departmentLabel(dept)}</h2><p>اختر الخدمة المطلوبة</p></div>
+  <div class="grid choices">${rows.map(s=>`<div class="card choice" onclick="chooseLocationService(${s.id})"><strong>${s.service_name}</strong></div>`).join("")}</div>`;
+}
+function chooseLocationService(id){
+  const s=serviceCatalog.find(x=>Number(x.id)===Number(id)); if(!s)return;
+  visitorState.dept=s.department; visitorState.section=s.section||null; visitorState.service=s.service_name; visitorState.serviceMeta=s; visitorState.college=null; visitorState.letter=null;
+  if(s.requires_college){ chooseCollege(); return; }
+  issueTicket();
+}
+function showLocationDisplayAfterTicket(ticket){
+  visitorIssuedTicket=ticket||visitorIssuedTicket;
+  const d=currentServiceLocation?.display_configs; if(!d?.slug)return;
+  activeDisplaySlug=d.slug; showView("display"); renderDisplay();
+}
 
 async function loadDepartmentCatalog(){
   const {data,error}=await supabaseClient
@@ -2225,7 +2388,7 @@ function populateHallSelects(){
 }
 
 function hideAdminSubpanels(exceptId){
-  ["departmentManagementPanel","hallManagementPanel","displayManagementPanel","serviceManagementPanel","userPermissionsPanel","manageUserPanel","addUserPanel"].forEach(id=>{
+  ["serviceLocationManagementPanel","locationServicesPanel","departmentManagementPanel","hallManagementPanel","displayManagementPanel","serviceManagementPanel","userPermissionsPanel","manageUserPanel","addUserPanel"].forEach(id=>{
     if(id!==exceptId) document.getElementById(id)?.classList.add("hidden");
   });
 }
@@ -3505,11 +3668,11 @@ async function handleRecoveryMode(){
   const recovery=await handleRecoveryMode();
   if(!recovery){
     await loadDepartmentCatalog();
-    await Promise.all([loadServiceCatalog(),loadHallsAndDisplays()]);
-    const displayMode=await applyDisplayUrl();
-    if(!displayMode){
-      visitorHome();
-      renderDisplay();
+    await Promise.all([loadServiceCatalog(),loadHallsAndDisplays(),loadServiceLocations()]);
+    const locationMode=await resolveLocationFromUrl();
+    if(!locationMode){
+      const displayMode=await applyDisplayUrl();
+      if(!displayMode){ visitorHome(); renderDisplay(); }
     }
   }
 })();
