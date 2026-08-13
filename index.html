@@ -99,6 +99,40 @@
   .call-card .n{font-size:56px;font-weight:800;color:var(--primary)}
   .call-card .c{font-size:26px;font-weight:700}
   .history{margin-top:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+  .display-main-layout{display:block}
+  .visitor-ticket-panel{display:none}
+  .display-board.visitor-waiting .display-main-layout{
+    display:grid;
+    grid-template-columns:minmax(250px,.72fr) minmax(0,1.7fr);
+    gap:22px;
+    align-items:stretch;
+  }
+  .display-board.visitor-waiting .visitor-ticket-panel{
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    background:#fff;
+    color:#111827;
+    border-radius:22px;
+    padding:26px 18px;
+    min-height:330px;
+    text-align:center;
+  }
+  .visitor-ticket-panel .own-label{font-size:20px;color:var(--muted);font-weight:700}
+  .visitor-ticket-panel .own-number{font-size:64px;line-height:1.1;font-weight:900;color:var(--primary);margin:14px 0}
+  .visitor-ticket-panel .own-location{font-size:17px;color:var(--muted);font-weight:700}
+  .display-live-panel{min-width:0}
+  .display-board.visitor-waiting .display-live-panel{
+    background:rgba(255,255,255,.08);
+    border-radius:22px;
+    padding:20px;
+  }
+  @media(max-width:760px){
+    .display-board.visitor-waiting .display-main-layout{grid-template-columns:1fr}
+    .display-board.visitor-waiting .visitor-ticket-panel{min-height:auto;padding:20px}
+    .visitor-ticket-panel .own-number{font-size:52px}
+  }
   .hist{background:rgba(255,255,255,.08);padding:14px;border-radius:14px;text-align:center}
   .notice{background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;padding:12px 14px;border-radius:12px;margin-bottom:14px}
   .muted{color:var(--muted)} .hidden{display:none!important}
@@ -711,9 +745,19 @@
         <label style="display:block;margin-bottom:6px">شاشة النداء</label>
         <select id="publicDisplaySelector" onchange="selectPublicDisplay(this.value)" style="width:100%;padding:10px;border-radius:10px"></select>
       </div>
-      <h2 id="publicDisplayTitle">الرجاء متابعة رقم الانتظار والكاونتر</h2>
-      <div id="latestCall" class="called"></div>
-      <div id="callHistory" class="history"></div>
+      <div id="displayMainLayout" class="display-main-layout">
+        <aside id="visitorWaitingTicketPanel" class="visitor-ticket-panel">
+          <div class="own-label">رقم انتظارك</div>
+          <div id="visitorWaitingTicketNumber" class="own-number">—</div>
+          <div id="visitorWaitingLocationName" class="own-location"></div>
+          <div class="muted" style="margin-top:12px">تابع شاشة النداء لمعرفة دورك والكاونتر</div>
+        </aside>
+        <div class="display-live-panel">
+          <h2 id="publicDisplayTitle">الرجاء متابعة رقم الانتظار والكاونتر</h2>
+          <div id="latestCall" class="called"></div>
+          <div id="callHistory" class="history"></div>
+        </div>
+      </div>
     </div>
   </section>
 </main>
@@ -1148,6 +1192,9 @@ async function issueTicket(){
     return;
   }
 
+  visitorState.ticket=ticket;
+  visitorIssuedTicket=ticket;
+
   root.innerHTML=`
     <div class="card ticket-card">
       <div class="muted">رقم الانتظار</div>
@@ -1158,8 +1205,8 @@ async function issueTicket(){
       <div class="actions"><button class="btn primary" onclick="visitorRoot()">إنهاء</button></div>
     </div>`;
   if(currentServiceLocation){
-    visitorIssuedTicket=visitorState.ticket || visitorIssuedTicket;
-    setTimeout(()=>showLocationDisplayAfterTicket(visitorIssuedTicket),700);
+    persistVisitorTicket(currentServiceLocation.slug,ticket.ticket_number);
+    setTimeout(()=>showLocationDisplayAfterTicket(ticket),500);
   }
 
 }
@@ -2066,6 +2113,29 @@ async function markNoShow(){
   await refreshStaff();
   renderDisplay();
 }
+function setVisitorWaitingDisplayMode(enabled){
+  const board=document.querySelector("#display .display-board");
+  const number=document.getElementById("visitorWaitingTicketNumber");
+  const locationName=document.getElementById("visitorWaitingLocationName");
+  if(!board) return;
+
+  if(enabled){
+    board.classList.add("visitor-waiting");
+    const ownTicketNumber=
+      visitorState?.ticket?.ticket_number ||
+      visitorState?.ticket?.number ||
+      visitorIssuedTicket?.ticket_number ||
+      visitorIssuedTicket?.number ||
+      null;
+    if(number) number.textContent=ownTicketNumber || "—";
+    if(locationName) locationName.textContent=currentServiceLocation?.name || "";
+  }else{
+    board.classList.remove("visitor-waiting");
+    if(number) number.textContent="—";
+    if(locationName) locationName.textContent="";
+  }
+}
+
 async function renderDisplay(){
   const selector=document.getElementById("publicDisplaySelector");
   const title=document.getElementById("publicDisplayTitle");
@@ -2111,11 +2181,16 @@ async function renderDisplay(){
   const filtered=data || [];
   const latest=filtered[0];
 
-  document.querySelectorAll(".visitor-own-ticket").forEach(el=>el.remove());
-  const ownTicketNumber=visitorState?.ticket?.number || visitorState?.ticket?.ticket_number || visitorIssuedTicket?.number || visitorIssuedTicket?.ticket_number || null;
-  if(ownTicketNumber){
-    title.insertAdjacentHTML("afterend",`<div class="notice visitor-own-ticket" style="max-width:900px;margin:0 auto 16px;text-align:center;font-size:20px">رقم انتظارك: <b style="font-size:28px">${ownTicketNumber}</b></div>`);
-  }
+  const ownTicketNumber=
+    visitorState?.ticket?.ticket_number ||
+    visitorState?.ticket?.number ||
+    visitorIssuedTicket?.ticket_number ||
+    visitorIssuedTicket?.number ||
+    null;
+
+  setVisitorWaitingDisplayMode(
+    !!(currentServiceLocation?.slug && ownTicketNumber)
+  );
 
   if(!latest){
     const noLocationDepartments =
@@ -2498,6 +2573,37 @@ function loadPersistedVisitorTicket(locationSlug){
   }
 }
 
+async function applyDisplayUrl(){
+  const slug=new URL(window.location.href).searchParams.get("display");
+  if(!slug) return false;
+
+  hideSpecialModeChrome();
+
+  const displayControlBar=document.getElementById("displayControlBar");
+  if(displayControlBar) displayControlBar.classList.add("hidden");
+
+  // First treat the public screen URL as a service-location slug.
+  const location=(serviceLocations || []).find(l=>l.slug===slug && l.active) || null;
+
+  if(location?.display_configs?.slug){
+    currentServiceLocation=location;
+    activeDisplaySlug=location.display_configs.slug;
+  }else{
+    // Backward compatibility: direct internal display slug.
+    currentServiceLocation=null;
+    activeDisplaySlug=slug;
+  }
+
+  // A direct ?display= URL is always the physical screen, not a visitor view.
+  visitorIssuedTicket=null;
+  visitorState.ticket=null;
+  setVisitorWaitingDisplayMode(false);
+
+  showView("display");
+  renderDisplay();
+  return true;
+}
+
 async function resolveLocationFromUrl(){
   const slug=new URL(window.location.href).searchParams.get("location"); if(!slug)return false;
   await loadServiceLocations();
@@ -2509,6 +2615,16 @@ async function resolveLocationFromUrl(){
   const persisted=loadPersistedVisitorTicket(currentServiceLocation.slug);
   if(persisted){
     visitorIssuedTicket={ticket_number:persisted,number:persisted};
+    const d=currentServiceLocation?.display_configs;
+    if(d?.slug){
+      activeDisplaySlug=d.slug;
+      const displayControlBar=document.getElementById("displayControlBar");
+      if(displayControlBar) displayControlBar.classList.add("hidden");
+      showView("display");
+      setVisitorWaitingDisplayMode(true);
+      renderDisplay();
+      return true;
+    }
   }
 
   renderLocationVisitorHome();
@@ -2586,6 +2702,7 @@ function showLocationDisplayAfterTicket(ticket){
 
   activeDisplaySlug=d.slug;
   showView("display");
+  setVisitorWaitingDisplayMode(true);
   renderDisplay();
 }
 
