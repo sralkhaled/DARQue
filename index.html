@@ -2174,10 +2174,13 @@ async function openServiceLocationManagement(){
 
   // Load in a deterministic order. serviceCatalog also acts as a safe
   // fallback source if department_catalog is temporarily unavailable.
-  await loadServiceCatalog();
-  await loadDepartmentCatalog();
+  const serviceOk=await loadServiceCatalog();
+  const departmentOk=await loadDepartmentCatalog();
   await loadHallsAndDisplays();
   await loadServiceLocations();
+
+  if(!serviceOk) console.warn("Location editor continuing with department/built-in fallback.");
+  if(!departmentOk) console.warn("Location editor continuing with built-in/service fallback.");
 
   resetServiceLocationForm();
   renderServiceLocationAdminTable();
@@ -2529,8 +2532,8 @@ function renderLocationVisitorHome(){
   if(!vc)return;
 
   const allowed=new Set(locationDepartmentSlugs());
-  const departmentsForLocation=departmentCatalog.filter(
-    d=>d.active && allowed.has(d.slug)
+  const departmentsForLocation=locationDepartmentChoices().filter(
+    d=>allowed.has(d.slug)
   );
 
   vc.innerHTML=`
@@ -2878,6 +2881,51 @@ async function toggleHall(id,active){
   if(error){ alert(`تعذر تحديث القاعة: ${error.message}`); return; }
   await loadHallsAndDisplays();
   await renderHallAdminTable();
+}
+
+async function loadServiceCatalog(){
+  const { data, error } = await supabaseClient
+    .from("service_catalog")
+    .select("id,department,section,service_name,requires_college,requires_letter,ticket_prefix,active,sort_order")
+    .order("sort_order",{ascending:true});
+
+  if(error){
+    console.error("Service catalog load failed:",error);
+    serviceCatalog=[];
+    return false;
+  }
+
+  serviceCatalog=data || [];
+  return true;
+}
+
+function sectionLabel(value){
+  const map={
+    reception:"قسم الاستقبال",
+    activity:"قسم نشاط الخريج",
+    graduation:"قسم شؤون التخرج"
+  };
+  return map[value] || "—";
+}
+
+function serviceRouteRule(dept,section){
+  if(dept==="registration" || dept==="admissions" || dept==="independent")
+    return {college:false,letter:false,locked:true};
+
+  if(dept==="records")
+    return {college:null,letter:false,locked:false};
+
+  const dynamicDept=customDepartment(dept);
+  if(dynamicDept && !dynamicDept.built_in)
+    return {college:false,letter:false,locked:true};
+
+  if(dept==="graduates" && section==="reception")
+    return {college:false,letter:false,locked:true};
+
+  if(dept==="graduates" && ["activity","graduation"].includes(section))
+    return {college:true,letter:true,locked:true};
+
+  return {college:false,letter:false,locked:true};
 }
 
 async function openServiceManagement(){
