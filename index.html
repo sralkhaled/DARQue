@@ -553,7 +553,8 @@
         </div>
         <div id="displayAdminMessage" class="notice hidden"></div>
         <div class="actions">
-          <button class="btn primary" onclick="saveDisplayConfig()">إضافة شاشة النداء</button>
+          <button class="btn primary" id="saveDisplayBtn" onclick="saveDisplayConfig()">إضافة شاشة النداء</button>
+          <button class="btn hidden" id="cancelDisplayEditBtn" onclick="cancelDisplayEdit()">إلغاء التعديل</button>
         </div>
 
         <div style="overflow:auto;margin-top:18px">
@@ -900,6 +901,7 @@ let editingServiceLocationId=null;
 let visitorIssuedTicket=null;
 let halls = [];
 let displayConfigs = [];
+let editingDisplayConfigId = null;
 let activeDisplaySlug = null;
 let selectedPermissionUser = null;
 let staff = null;
@@ -2257,8 +2259,8 @@ function renderServiceLocationAdminTable(){
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn" onclick="editServiceLocation(${l.id})">تعديل</button>
         <button class="btn" onclick="openLocationServices(${l.id})">الإدارات</button>
-        <button class="btn" onclick="copyTextUrl(visitorLocationUrl('${l.slug}'),'تم نسخ رابط المراجع / QR.')">رابط المراجع</button>
-        <button class="btn" onclick="copyTextUrl(screenLocationUrl('${l.slug}'),'تم نسخ رابط شاشة النداء.')">رابط الشاشة</button>
+        <button class="btn" onclick="copyTextUrl(visitorLocationUrl('${l.slug}'),'تم نسخ رابط المراجع / QR.')">رابط المراجع / QR</button>
+        <button class="btn" onclick="window.open(screenLocationUrl('${l.slug}'),'_blank')">فتح شاشة النداء</button>
         <button class="btn" onclick="toggleServiceLocation(${l.id},${l.active?"false":"true"})">${l.active?"إيقاف":"تفعيل"}</button>
       </div>
     </td>
@@ -2740,6 +2742,7 @@ async function openDisplayManagement(){
   hideAdminSubpanels("displayManagementPanel");
   document.getElementById("displayManagementPanel").classList.remove("hidden");
   await loadHallsAndDisplays();
+  await loadServiceLocations();
   renderDisplayAdminTable();
   displayDeptChanged();
   populateDisplayServices();
@@ -2798,6 +2801,54 @@ function parseCounterList(value){
   return [...new Set(raw)];
 }
 
+function resetDisplayForm(){
+  editingDisplayConfigId=null;
+  document.getElementById("displayName").value="";
+  document.getElementById("displaySlug").value="";
+  document.getElementById("displayHall").value="";
+  document.getElementById("displayDept").value="";
+  document.getElementById("displaySection").value="";
+  document.getElementById("displayService").value="";
+  document.getElementById("displayCounters").value="";
+  displayDeptChanged();
+
+  const saveBtn=document.getElementById("saveDisplayBtn");
+  const cancelBtn=document.getElementById("cancelDisplayEditBtn");
+  if(saveBtn) saveBtn.textContent="إضافة شاشة النداء";
+  if(cancelBtn) cancelBtn.classList.add("hidden");
+}
+
+function editDisplayConfig(id){
+  const d=displayConfigs.find(x=>Number(x.id)===Number(id));
+  if(!d) return;
+
+  editingDisplayConfigId=d.id;
+  document.getElementById("displayName").value=d.name || "";
+  document.getElementById("displaySlug").value=d.slug || "";
+  document.getElementById("displayHall").value=d.hall_id || "";
+  document.getElementById("displayDept").value=d.department || "";
+  displayDeptChanged();
+
+  if(d.department==="graduates"){
+    document.getElementById("displaySection").value=d.section || "";
+    populateDisplayServices();
+  }
+
+  document.getElementById("displayService").value=d.service || "";
+  document.getElementById("displayCounters").value=(d.counter_numbers||[]).join(",");
+
+  const saveBtn=document.getElementById("saveDisplayBtn");
+  const cancelBtn=document.getElementById("cancelDisplayEditBtn");
+  if(saveBtn) saveBtn.textContent="حفظ التعديل";
+  if(cancelBtn) cancelBtn.classList.remove("hidden");
+
+  document.getElementById("displayManagementPanel").scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+function cancelDisplayEdit(){
+  resetDisplayForm();
+}
+
 async function saveDisplayConfig(){
   const name=document.getElementById("displayName").value.trim();
   const slug=normalizeSlug(document.getElementById("displaySlug").value);
@@ -2827,24 +2878,34 @@ async function saveDisplayConfig(){
     return;
   }
 
-  const {error}=await supabaseClient.from("display_configs").insert({
+  const payload={
     name,slug,hall_id,department,section,service,
     counter_numbers:counter_numbers.length ? counter_numbers : null,
     active:true
-  });
+  };
+
+  let error=null;
+  if(editingDisplayConfigId){
+    ({error}=await supabaseClient
+      .from("display_configs")
+      .update(payload)
+      .eq("id",editingDisplayConfigId));
+  }else{
+    ({error}=await supabaseClient
+      .from("display_configs")
+      .insert(payload));
+  }
 
   if(error){
-    msg.textContent=error.code==="23505" ? "رمز شاشة النداء مستخدم مسبقاً." : `تعذر إضافة الشاشة: ${error.message}`;
+    msg.textContent=error.code==="23505" ? "رمز شاشة النداء مستخدم مسبقاً." : `تعذر حفظ الشاشة: ${error.message}`;
     msg.classList.remove("hidden");
     return;
   }
 
-  msg.textContent="تمت إضافة شاشة النداء بنجاح.";
+  msg.textContent=editingDisplayConfigId ? "تم حفظ التعديل." : "تمت إضافة شاشة النداء بنجاح.";
   msg.classList.remove("hidden");
-  document.getElementById("displayName").value="";
-  document.getElementById("displaySlug").value="";
-  document.getElementById("displayCounters").value="";
-  document.getElementById("displayService").value="";
+
+  resetDisplayForm();
   await loadHallsAndDisplays();
   renderDisplayAdminTable();
 }
@@ -2855,6 +2916,35 @@ function displayConfigUrl(slug){
   url.hash="";
   url.searchParams.set("display",slug);
   return url.toString();
+}
+
+function displayPhysicalUrl(displayConfig){
+  const linkedLocation=(serviceLocations||[]).find(
+    l=>Number(l.display_id)===Number(displayConfig.id) && l.active
+  );
+
+  if(linkedLocation){
+    return screenLocationUrl(linkedLocation.slug);
+  }
+
+  const url=new URL(window.location.href);
+  url.search="";
+  url.hash="";
+  url.searchParams.set("display",displayConfig.slug);
+  return url.toString();
+}
+
+async function copyDisplayPhysicalUrl(id){
+  const d=displayConfigs.find(x=>Number(x.id)===Number(id));
+  if(!d) return;
+
+  const url=displayPhysicalUrl(d);
+  try{
+    await navigator.clipboard.writeText(url);
+    alert("تم نسخ رابط شاشة النداء.");
+  }catch{
+    prompt("رابط شاشة النداء:",url);
+  }
 }
 
 async function copyDisplayUrl(slug){
@@ -2887,7 +2977,8 @@ function renderDisplayAdminTable(){
         <td style="padding:10px;border-bottom:1px solid var(--border)"><span class="tag">${d.active?"نشطة":"موقوفة"}</span></td>
         <td style="padding:10px;border-bottom:1px solid var(--border)">
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="btn" style="padding:7px 10px" onclick="copyDisplayUrl('${d.slug}')">نسخ الرابط</button>
+            <button class="btn" style="padding:7px 10px" onclick="editDisplayConfig(${d.id})">تعديل</button>
+            <button class="btn" style="padding:7px 10px" onclick="copyDisplayPhysicalUrl(${d.id})">رابط شاشة النداء</button>
             <button class="btn" style="padding:7px 10px" onclick="toggleDisplayConfig(${d.id},${d.active?"false":"true"})">${d.active?"إيقاف":"تفعيل"}</button>
           </div>
         </td>
