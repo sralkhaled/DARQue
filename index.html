@@ -2078,8 +2078,17 @@ async function renderDisplay(){
 
   title.textContent=cfg.name;
 
-  const { data, error } = await supabaseClient
-    .rpc("get_display_calls",{p_slug:cfg.slug});
+  // When this screen was reached through a configured service location
+  // (?display=<location-slug> or after a QR-issued ticket), the location's
+  // assigned departments are authoritative. This prevents another
+  // department in the same hall from appearing on this screen.
+  const displayRead = currentServiceLocation?.slug
+    ? await supabaseClient.rpc("get_location_display_calls",{
+        p_location_slug: currentServiceLocation.slug
+      })
+    : await supabaseClient.rpc("get_display_calls",{p_slug:cfg.slug});
+
+  const { data, error } = displayRead;
 
   if(error){
     console.error("Supabase display read failed:", error);
@@ -2098,7 +2107,13 @@ async function renderDisplay(){
   }
 
   if(!latest){
-    latestBox.innerHTML=`<div class="call-card" style="grid-column:1/-1"><div class="muted">بانتظار أول نداء</div></div>`;
+    const noLocationDepartments =
+      currentServiceLocation &&
+      !(currentServiceLocation.service_location_departments||[]).length;
+
+    latestBox.innerHTML=`<div class="call-card" style="grid-column:1/-1"><div class="muted">${
+      noLocationDepartments ? "لم يتم تحديد إدارات لهذا الموقع" : "بانتظار أول نداء"
+    }</div></div>`;
   }else{
     const destination=latest.counter_number ? `كاونتر ${latest.counter_number}` : cfg.name;
     latestBox.innerHTML=`
