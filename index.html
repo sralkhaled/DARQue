@@ -358,7 +358,7 @@
 
       <div id="serviceLocationManagementPanel" class="card hidden" style="box-shadow:none;margin:0 0 18px;padding:18px;background:#f8fafc">
         <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
-          <div><h4 style="margin:0">مواقع الخدمة / صفحات QR</h4><div class="muted">ربط كل موقع بخدماته وشاشة النداء الخاصة به</div></div>
+          <div><h4 style="margin:0">مواقع الخدمة / صفحات QR</h4><div class="muted">إدارة الموقع والإدارات المرتبطة ورابطي المراجع وشاشة النداء</div></div>
           <button class="btn" onclick="closeServiceLocationManagement()">إغلاق</button>
         </div>
         <div class="grid" style="grid-template-columns:2fr 1.4fr 2fr 1fr;gap:12px;margin-top:14px">
@@ -367,6 +367,18 @@
           <div class="field"><label>شاشة النداء</label><select id="locationDisplay"></select></div>
           <div class="field"><label>ترتيب العرض</label><input id="locationSort" type="number" value="100"></div>
         </div>
+
+        <div class="field" style="margin-top:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+            <label style="margin:0">الإدارات الموجودة في الموقع</label>
+            <label class="check" style="margin:0">
+              <input type="checkbox" id="locationSelectAllDepartments" onchange="toggleAllLocationDepartments(this.checked)">
+              تحديد جميع الإدارات
+            </label>
+          </div>
+          <div id="locationDepartmentsChecklist" class="checklist" style="margin-top:10px"></div>
+        </div>
+
         <div id="locationAdminMessage" class="notice hidden"></div>
         <div class="actions">
           <button class="btn primary" id="saveLocationBtn" onclick="saveServiceLocation()">إضافة الموقع</button>
@@ -376,16 +388,6 @@
           <thead><tr><th>الموقع</th><th>شاشة النداء</th><th>الإدارات</th><th>الحالة</th><th>إجراء</th></tr></thead>
           <tbody id="locationAdminTable"></tbody>
         </table></div>
-      </div>
-
-      <div id="locationServicesPanel" class="card hidden" style="box-shadow:none;margin:0 0 18px;padding:18px;background:#fff">
-        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
-          <div><h4 id="locationServicesTitle" style="margin:0">إدارات الموقع</h4><div class="muted">حدد إدارة واحدة أو أكثر لتظهر للمراجع في هذا الموقع</div></div>
-          <button class="btn" onclick="document.getElementById('locationServicesPanel').classList.add('hidden')">إغلاق</button>
-        </div>
-        <div style="margin:14px 0"><label class="check"><input type="checkbox" id="locationSelectAllServices" onchange="toggleAllLocationServices(this.checked)"> تحديد جميع الإدارات</label></div>
-        <div id="locationServicesChecklist" class="checklist"></div>
-        <div class="actions"><button class="btn primary" onclick="saveLocationServices()">حفظ الإدارات</button></div>
       </div>
 
       <div id="departmentManagementPanel" class="card hidden" style="box-shadow:none;margin:0 0 18px;padding:18px;background:#f8fafc">
@@ -488,88 +490,6 @@
               </tr>
             </thead>
             <tbody id="hallAdminTable"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div id="displayManagementPanel" style="display:none!important" class="card hidden" style="box-shadow:none;margin:0 0 18px;padding:18px;background:#f8fafc">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
-          <div>
-            <h4 style="margin:0 0 4px">إدارة شاشات النداء</h4>
-            <div class="muted">حدد بالضبط النداءات التي تظهر على كل شاشة فعلية</div>
-          </div>
-          <button class="btn" onclick="closeDisplayManagement()">إغلاق</button>
-        </div>
-
-        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px">
-          <div class="field">
-            <label>اسم الشاشة</label>
-            <input id="displayName" placeholder="مثال: شاشة Hall1" />
-          </div>
-          <div class="field">
-            <label>رمز الشاشة</label>
-            <input id="displaySlug" dir="ltr" placeholder="hall1-screen" />
-          </div>
-          <div class="field">
-            <label>القاعة</label>
-            <select id="displayHall">
-              <option value="">جميع القاعات / غير محدد</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>الإدارة</label>
-            <select id="displayDept" onchange="displayDeptChanged()">
-              <option value="">جميع الإدارات / غير محدد</option>
-              <option value="registration">إدارة التسجيل</option>
-              <option value="records">إدارة السجلات</option>
-              <option value="admissions">إدارة القبول</option>
-              <option value="graduates">إدارة الخريجين</option>
-              <option value="independent">خدمات مستقلة</option>
-            </select>
-          </div>
-          <div class="field hidden" id="displaySectionWrap">
-            <label>القسم</label>
-            <select id="displaySection" onchange="populateDisplayServices()">
-              <option value="">جميع أقسام الخريجين</option>
-              <option value="reception">قسم الاستقبال</option>
-              <option value="activity">قسم نشاط الخريج</option>
-              <option value="graduation">قسم شؤون التخرج</option>
-            </select>
-          </div>
-          <div class="field hidden" id="displayServiceWrap">
-            <label>الخدمة</label>
-            <select id="displayService">
-              <option value="">جميع الخدمات</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>كاونترات محددة (اختياري)</label>
-            <input id="displayCounters" dir="ltr" placeholder="1,2,3,4" />
-          </div>
-        </div>
-
-        <div class="notice" style="margin-top:8px">
-          يمكن تحديد القاعة فقط، أو الإدارة فقط، أو القسم، أو كاونترات محددة، أو الجمع بينها.
-        </div>
-        <div id="displayAdminMessage" class="notice hidden"></div>
-        <div class="actions">
-          <button class="btn primary" id="saveDisplayBtn" onclick="saveDisplayConfig()">إضافة شاشة النداء</button>
-          <button class="btn hidden" id="cancelDisplayEditBtn" onclick="cancelDisplayEdit()">إلغاء التعديل</button>
-        </div>
-
-        <div style="overflow:auto;margin-top:18px">
-          <table style="width:100%;border-collapse:collapse;min-width:920px">
-            <thead>
-              <tr>
-                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">اسم الشاشة</th>
-                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">القاعة</th>
-                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">الإدارة / القسم</th>
-                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">الكاونترات</th>
-                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">الحالة</th>
-                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border)">إجراء</th>
-              </tr>
-            </thead>
-            <tbody id="displayAdminTable"></tbody>
           </table>
         </div>
       </div>
@@ -2251,19 +2171,54 @@ async function loadServiceLocations(){
 async function openServiceLocationManagement(){
   hideAdminSubpanels("serviceLocationManagementPanel");
   document.getElementById("serviceLocationManagementPanel").classList.remove("hidden");
-  await Promise.all([loadHallsAndDisplays(),loadServiceLocations(),loadServiceCatalog()]);
+  await Promise.all([loadDepartmentCatalog(),loadHallsAndDisplays(),loadServiceLocations(),loadServiceCatalog()]);
+  renderLocationDepartmentsChecklist([]);
   renderServiceLocationAdminTable();
 }
 function closeServiceLocationManagement(){
   document.getElementById("serviceLocationManagementPanel").classList.add("hidden");
-  document.getElementById("locationServicesPanel").classList.add("hidden");
 }
+function renderLocationDepartmentsChecklist(selectedDepartments=[]){
+  const box=document.getElementById("locationDepartmentsChecklist");
+  if(!box) return;
+
+  const selected=new Set(selectedDepartments || []);
+  box.innerHTML=(departmentCatalog || [])
+    .filter(d=>d.active && d.slug!=="independent")
+    .map(d=>`
+      <label class="check">
+        <input class="location-department-checkbox"
+               type="checkbox"
+               value="${d.slug}"
+               ${selected.has(d.slug) ? "checked" : ""}>
+        ${d.name}
+      </label>`).join("");
+
+  const all=document.querySelectorAll(".location-department-checkbox");
+  const allChecked=all.length>0 && [...all].every(x=>x.checked);
+  const selectAll=document.getElementById("locationSelectAllDepartments");
+  if(selectAll) selectAll.checked=allChecked;
+}
+
+function toggleAllLocationDepartments(checked){
+  document.querySelectorAll(".location-department-checkbox")
+    .forEach(x=>x.checked=checked);
+}
+
+function selectedLocationDepartments(){
+  return [...document.querySelectorAll(".location-department-checkbox:checked")]
+    .map(x=>x.value);
+}
+
 function resetServiceLocationForm(){
   editingServiceLocationId=null;
   document.getElementById("locationName").value="";
   document.getElementById("locationSlug").value="";
   document.getElementById("locationDisplay").value="";
   document.getElementById("locationSort").value="100";
+  renderLocationDepartmentsChecklist([]);
+  const selectAll=document.getElementById("locationSelectAllDepartments");
+  if(selectAll) selectAll.checked=false;
   const saveBtn=document.getElementById("saveLocationBtn");
   const cancelBtn=document.getElementById("cancelLocationEditBtn");
   if(saveBtn) saveBtn.textContent="إضافة الموقع";
@@ -2279,6 +2234,9 @@ function editServiceLocation(id){
   document.getElementById("locationSlug").value=l.slug || "";
   document.getElementById("locationDisplay").value=l.display_id || "";
   document.getElementById("locationSort").value=l.sort_order ?? 100;
+  renderLocationDepartmentsChecklist(
+    (l.service_location_departments || []).map(x=>x.department)
+  );
 
   const saveBtn=document.getElementById("saveLocationBtn");
   const cancelBtn=document.getElementById("cancelLocationEditBtn");
@@ -2292,11 +2250,35 @@ function cancelServiceLocationEdit(){
   resetServiceLocationForm();
 }
 
+async function syncLocationDepartments(locationId,departments){
+  const {error:deleteError}=await supabaseClient
+    .from("service_location_departments")
+    .delete()
+    .eq("location_id",locationId);
+
+  if(deleteError) throw deleteError;
+
+  if(departments.length){
+    const rows=departments.map((department,i)=>({
+      location_id:locationId,
+      department,
+      sort_order:(i+1)*10
+    }));
+
+    const {error:insertError}=await supabaseClient
+      .from("service_location_departments")
+      .insert(rows);
+
+    if(insertError) throw insertError;
+  }
+}
+
 async function saveServiceLocation(){
   const name=document.getElementById("locationName").value.trim();
   const slug=normalizeSlug(document.getElementById("locationSlug").value);
   const display_id=Number(document.getElementById("locationDisplay").value||0)||null;
   const sort_order=Number(document.getElementById("locationSort").value||100);
+  const departments=selectedLocationDepartments();
   const msg=document.getElementById("locationAdminMessage");
 
   if(!name||!slug||!display_id){
@@ -2305,29 +2287,49 @@ async function saveServiceLocation(){
     return;
   }
 
-  let error=null;
-  if(editingServiceLocationId){
-    ({error}=await supabaseClient
-      .from("service_locations")
-      .update({name,slug,display_id,sort_order})
-      .eq("id",editingServiceLocationId));
-  }else{
-    ({error}=await supabaseClient
-      .from("service_locations")
-      .insert({name,slug,display_id,active:true,sort_order}));
-  }
-
-  if(error){
-    msg.textContent=error.code==="23505" ? "رمز الرابط أو اسم الموقع مستخدم مسبقاً." : error.message;
+  if(!departments.length){
+    msg.textContent="يرجى تحديد إدارة واحدة على الأقل لهذا الموقع.";
     msg.classList.remove("hidden");
     return;
   }
 
-  msg.textContent=editingServiceLocationId ? "تم حفظ التعديل." : "تمت إضافة الموقع.";
-  msg.classList.remove("hidden");
-  resetServiceLocationForm();
-  await loadServiceLocations();
-  renderServiceLocationAdminTable();
+  try{
+    let locationId=editingServiceLocationId;
+
+    if(editingServiceLocationId){
+      const {error}=await supabaseClient
+        .from("service_locations")
+        .update({name,slug,display_id,sort_order})
+        .eq("id",editingServiceLocationId);
+
+      if(error) throw error;
+    }else{
+      const {data,error}=await supabaseClient
+        .from("service_locations")
+        .insert({name,slug,display_id,active:true,sort_order})
+        .select("id")
+        .single();
+
+      if(error) throw error;
+      locationId=data.id;
+    }
+
+    await syncLocationDepartments(locationId,departments);
+
+    msg.textContent=editingServiceLocationId
+      ? "تم حفظ تعديل الموقع والإدارات."
+      : "تمت إضافة الموقع والإدارات.";
+    msg.classList.remove("hidden");
+
+    resetServiceLocationForm();
+    await loadServiceLocations();
+    renderServiceLocationAdminTable();
+  }catch(error){
+    msg.textContent=error?.code==="23505"
+      ? "رمز الرابط أو اسم الموقع مستخدم مسبقاً."
+      : (error?.message || "تعذر حفظ الموقع.");
+    msg.classList.remove("hidden");
+  }
 }
 
 function visitorLocationUrl(slug){
@@ -2365,7 +2367,6 @@ function renderServiceLocationAdminTable(){
     <td>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn" onclick="editServiceLocation(${l.id})">تعديل</button>
-        <button class="btn" onclick="openLocationServices(${l.id})">الإدارات</button>
         <button class="btn" onclick="copyTextUrl(visitorLocationUrl('${l.slug}'),'تم نسخ رابط المراجع / QR.')">رابط المراجع / QR</button>
         <button class="btn" onclick="copyTextUrl(screenLocationUrl('${l.slug}'),'تم نسخ رابط شاشة النداء.')">رابط شاشة النداء</button>
         <button class="btn" onclick="toggleServiceLocation(${l.id},${l.active?"false":"true"})">${l.active?"إيقاف":"تفعيل"}</button>
@@ -2377,66 +2378,6 @@ function renderServiceLocationAdminTable(){
 async function toggleServiceLocation(id,active){
   await supabaseClient.from("service_locations").update({active}).eq("id",id);
   await loadServiceLocations(); renderServiceLocationAdminTable();
-}
-async function openLocationServices(id){
-  selectedLocationAdmin=serviceLocations.find(l=>Number(l.id)===Number(id));
-  if(!selectedLocationAdmin)return;
-
-  document.getElementById("locationServicesPanel").classList.remove("hidden");
-  document.getElementById("locationServicesTitle").textContent=`إدارات ${selectedLocationAdmin.name}`;
-
-  const selected=new Set(
-    (selectedLocationAdmin.service_location_departments||[]).map(x=>x.department)
-  );
-
-  document.getElementById("locationServicesChecklist").innerHTML=
-    departmentCatalog
-      .filter(d=>d.active && d.slug!=="independent")
-      .map(d=>`
-        <label class="check">
-          <input class="location-service-checkbox"
-                 type="checkbox"
-                 value="${d.slug}"
-                 ${selected.has(d.slug)?"checked":""}>
-          ${d.name}
-        </label>`).join("");
-}
-
-function toggleAllLocationServices(v){
-  document.querySelectorAll(".location-service-checkbox").forEach(x=>x.checked=v);
-}
-
-async function saveLocationServices(){
-  if(!selectedLocationAdmin)return;
-
-  const departments=[
-    ...document.querySelectorAll(".location-service-checkbox:checked")
-  ].map(x=>x.value);
-
-  const {error:e1}=await supabaseClient
-    .from("service_location_departments")
-    .delete()
-    .eq("location_id",selectedLocationAdmin.id);
-
-  if(e1){ alert(e1.message); return; }
-
-  if(departments.length){
-    const rows=departments.map((department,i)=>({
-      location_id:selectedLocationAdmin.id,
-      department,
-      sort_order:(i+1)*10
-    }));
-
-    const {error:e2}=await supabaseClient
-      .from("service_location_departments")
-      .insert(rows);
-
-    if(e2){ alert(e2.message); return; }
-  }
-
-  alert("تم حفظ إدارات الموقع.");
-  await loadServiceLocations();
-  renderServiceLocationAdminTable();
 }
 function hideSpecialModeChrome(){
   // Dedicated QR and display URLs are kiosk-style pages:
@@ -2712,7 +2653,7 @@ function populateHallSelects(){
 }
 
 function hideAdminSubpanels(exceptId){
-  ["serviceLocationManagementPanel","locationServicesPanel","departmentManagementPanel","hallManagementPanel","displayManagementPanel","serviceManagementPanel","userPermissionsPanel","manageUserPanel","addUserPanel"].forEach(id=>{
+  ["serviceLocationManagementPanel","departmentManagementPanel","hallManagementPanel","serviceManagementPanel","userPermissionsPanel","manageUserPanel","addUserPanel"].forEach(id=>{
     if(id!==exceptId) document.getElementById(id)?.classList.add("hidden");
   });
 }
@@ -2853,322 +2794,6 @@ async function toggleHall(id,active){
   if(error){ alert(`تعذر تحديث القاعة: ${error.message}`); return; }
   await loadHallsAndDisplays();
   await renderHallAdminTable();
-}
-
-async function openDisplayManagement(){
-  await loadDepartmentCatalog();
-  hideAdminSubpanels("displayManagementPanel");
-  document.getElementById("displayManagementPanel").classList.remove("hidden");
-  await loadHallsAndDisplays();
-  await loadServiceLocations();
-  renderDisplayAdminTable();
-  displayDeptChanged();
-  populateDisplayServices();
-  document.getElementById("displayManagementPanel").scrollIntoView({behavior:"smooth",block:"start"});
-}
-
-function closeDisplayManagement(){
-  document.getElementById("displayManagementPanel").classList.add("hidden");
-}
-
-function displayDeptChanged(){
-  const dept=document.getElementById("displayDept").value;
-  const wrap=document.getElementById("displaySectionWrap");
-  if(dept==="graduates") wrap.classList.remove("hidden");
-  else{
-    wrap.classList.add("hidden");
-    document.getElementById("displaySection").value="";
-  }
-  populateDisplayServices();
-}
-
-function populateDisplayServices(){
-  const dept=document.getElementById("displayDept").value;
-  const section=dept==="graduates" ? (document.getElementById("displaySection").value || null) : null;
-  const wrap=document.getElementById("displayServiceWrap");
-  const select=document.getElementById("displayService");
-
-  if(!dept){
-    wrap.classList.add("hidden");
-    select.innerHTML=`<option value="">جميع الخدمات</option>`;
-    return;
-  }
-
-  let services=serviceCatalog.filter(s=>s.active && s.department===dept);
-
-  if(dept==="graduates"){
-    if(section) services=services.filter(s=>s.section===section);
-    else services=[];
-  }else{
-    services=services.filter(s=>!s.section);
-  }
-
-  if(!services.length){
-    wrap.classList.add("hidden");
-    select.innerHTML=`<option value="">جميع الخدمات</option>`;
-    return;
-  }
-
-  wrap.classList.remove("hidden");
-  select.innerHTML=`<option value="">جميع الخدمات</option>` +
-    services.map(s=>`<option value="${s.service_name}">${s.service_name}</option>`).join("");
-}
-
-function parseCounterList(value){
-  const raw=String(value||"").split(",").map(x=>Number(x.trim())).filter(x=>Number.isInteger(x) && x>0);
-  return [...new Set(raw)];
-}
-
-function resetDisplayForm(){
-  editingDisplayConfigId=null;
-  document.getElementById("displayName").value="";
-  document.getElementById("displaySlug").value="";
-  document.getElementById("displayHall").value="";
-  document.getElementById("displayDept").value="";
-  document.getElementById("displaySection").value="";
-  document.getElementById("displayService").value="";
-  document.getElementById("displayCounters").value="";
-  displayDeptChanged();
-
-  const saveBtn=document.getElementById("saveDisplayBtn");
-  const cancelBtn=document.getElementById("cancelDisplayEditBtn");
-  if(saveBtn) saveBtn.textContent="إضافة شاشة النداء";
-  if(cancelBtn) cancelBtn.classList.add("hidden");
-}
-
-function editDisplayConfig(id){
-  const d=displayConfigs.find(x=>Number(x.id)===Number(id));
-  if(!d) return;
-
-  editingDisplayConfigId=d.id;
-  document.getElementById("displayName").value=d.name || "";
-  document.getElementById("displaySlug").value=d.slug || "";
-  document.getElementById("displayHall").value=d.hall_id || "";
-  document.getElementById("displayDept").value=d.department || "";
-  displayDeptChanged();
-
-  if(d.department==="graduates"){
-    document.getElementById("displaySection").value=d.section || "";
-    populateDisplayServices();
-  }
-
-  document.getElementById("displayService").value=d.service || "";
-  document.getElementById("displayCounters").value=(d.counter_numbers||[]).join(",");
-
-  const saveBtn=document.getElementById("saveDisplayBtn");
-  const cancelBtn=document.getElementById("cancelDisplayEditBtn");
-  if(saveBtn) saveBtn.textContent="حفظ التعديل";
-  if(cancelBtn) cancelBtn.classList.remove("hidden");
-
-  document.getElementById("displayManagementPanel").scrollIntoView({behavior:"smooth",block:"start"});
-}
-
-function cancelDisplayEdit(){
-  resetDisplayForm();
-}
-
-async function saveDisplayConfig(){
-  const name=document.getElementById("displayName").value.trim();
-  const slug=normalizeSlug(document.getElementById("displaySlug").value);
-  const hallValue=document.getElementById("displayHall").value;
-  const department=document.getElementById("displayDept").value || null;
-  const section=department==="graduates" ? (document.getElementById("displaySection").value || null) : null;
-  const service=department ? (document.getElementById("displayService").value || null) : null;
-  const counter_numbers=parseCounterList(document.getElementById("displayCounters").value);
-  const hall_id=hallValue ? Number(hallValue) : null;
-  const msg=document.getElementById("displayAdminMessage");
-
-  if(!name || !slug){
-    msg.textContent="يرجى إدخال اسم الشاشة ورمزها.";
-    msg.classList.remove("hidden");
-    return;
-  }
-
-  if(!hall_id && !department && !section && !counter_numbers.length){
-    msg.textContent="يجب تحديد نطاق واحد على الأقل للشاشة: قاعة أو إدارة أو قسم أو كاونترات.";
-    msg.classList.remove("hidden");
-    return;
-  }
-
-  if(counter_numbers.length && !hall_id){
-    msg.textContent="عند تحديد كاونترات معينة، يرجى تحديد القاعة أيضاً لأن رقم الكاونتر قد يتكرر بين القاعات.";
-    msg.classList.remove("hidden");
-    return;
-  }
-
-  const payload={
-    name,slug,hall_id,department,section,service,
-    counter_numbers:counter_numbers.length ? counter_numbers : null,
-    active:true
-  };
-
-  let error=null;
-  if(editingDisplayConfigId){
-    ({error}=await supabaseClient
-      .from("display_configs")
-      .update(payload)
-      .eq("id",editingDisplayConfigId));
-  }else{
-    ({error}=await supabaseClient
-      .from("display_configs")
-      .insert(payload));
-  }
-
-  if(error){
-    msg.textContent=error.code==="23505" ? "رمز شاشة النداء مستخدم مسبقاً." : `تعذر حفظ الشاشة: ${error.message}`;
-    msg.classList.remove("hidden");
-    return;
-  }
-
-  msg.textContent=editingDisplayConfigId ? "تم حفظ التعديل." : "تمت إضافة شاشة النداء بنجاح.";
-  msg.classList.remove("hidden");
-
-  resetDisplayForm();
-  await loadHallsAndDisplays();
-  renderDisplayAdminTable();
-}
-
-function displayConfigUrl(slug){
-  const url=new URL(window.location.href);
-  url.search="";
-  url.hash="";
-  url.searchParams.set("display",slug);
-  return url.toString();
-}
-
-function displayPhysicalUrl(displayConfig){
-  const linkedLocation=(serviceLocations||[]).find(
-    l=>Number(l.display_id)===Number(displayConfig.id) && l.active
-  );
-
-  if(linkedLocation){
-    return screenLocationUrl(linkedLocation.slug);
-  }
-
-  const url=new URL(window.location.href);
-  url.search="";
-  url.hash="";
-  url.searchParams.set("display",displayConfig.slug);
-  return url.toString();
-}
-
-async function copyDisplayPhysicalUrl(id){
-  const d=displayConfigs.find(x=>Number(x.id)===Number(id));
-  if(!d) return;
-
-  const url=displayPhysicalUrl(d);
-  try{
-    await navigator.clipboard.writeText(url);
-    alert("تم نسخ رابط شاشة النداء.");
-  }catch{
-    prompt("رابط شاشة النداء:",url);
-  }
-}
-
-async function copyDisplayUrl(slug){
-  const url=displayConfigUrl(slug);
-  try{
-    await navigator.clipboard.writeText(url);
-    alert("تم نسخ رابط شاشة النداء.");
-  }catch{
-    prompt("رابط شاشة النداء:",url);
-  }
-}
-
-function renderDisplayAdminTable(){
-  const body=document.getElementById("displayAdminTable");
-  if(!displayConfigs.length){
-    body.innerHTML=`<tr><td colspan="6" class="muted" style="padding:20px;text-align:center">لا توجد شاشات نداء معرفة بعد.</td></tr>`;
-    return;
-  }
-
-  body.innerHTML=displayConfigs.map(d=>{
-    const hall=d.halls?.name || "—";
-    const route=[d.department?departmentLabel(d.department):null,d.section?sectionLabel(d.section):null,d.service||null].filter(Boolean).join(" / ") || "—";
-    const counters=(d.counter_numbers||[]).map(x=>`كاونتر ${x}`).join("، ") || "—";
-    return `
-      <tr>
-        <td style="padding:10px;border-bottom:1px solid var(--border)"><b>${d.name}</b><br><small dir="ltr">${d.slug}</small></td>
-        <td style="padding:10px;border-bottom:1px solid var(--border)">${hall}</td>
-        <td style="padding:10px;border-bottom:1px solid var(--border)">${route}</td>
-        <td style="padding:10px;border-bottom:1px solid var(--border)">${counters}</td>
-        <td style="padding:10px;border-bottom:1px solid var(--border)"><span class="tag">${d.active?"نشطة":"موقوفة"}</span></td>
-        <td style="padding:10px;border-bottom:1px solid var(--border)">
-          <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="btn" style="padding:7px 10px" onclick="editDisplayConfig(${d.id})">تعديل</button>
-            <button class="btn" style="padding:7px 10px" onclick="copyDisplayPhysicalUrl(${d.id})">رابط شاشة النداء</button>
-            <button class="btn" style="padding:7px 10px" onclick="toggleDisplayConfig(${d.id},${d.active?"false":"true"})">${d.active?"إيقاف":"تفعيل"}</button>
-          </div>
-        </td>
-      </tr>`;
-  }).join("");
-}
-
-async function toggleDisplayConfig(id,active){
-  const {error}=await supabaseClient.from("display_configs").update({active}).eq("id",id);
-  if(error){ alert(`تعذر تحديث شاشة النداء: ${error.message}`); return; }
-  await loadHallsAndDisplays();
-  renderDisplayAdminTable();
-}
-
-async function applyDisplayUrl(){
-  const slug=new URL(window.location.href).searchParams.get("display");
-  if(!slug) return false;
-
-  hideSpecialModeChrome();
-
-  const displayControlBar=document.getElementById("displayControlBar");
-  if(displayControlBar) displayControlBar.classList.add("hidden");
-
-  // Preferred public screen link: ?display=<location-slug>
-  const {data:resolved,error:resolveError}=await supabaseClient
-    .rpc("resolve_location_display",{p_location_slug:slug});
-
-  if(!resolveError && resolved && resolved.length){
-    activeDisplaySlug=resolved[0].display_slug;
-    currentServiceLocation=serviceLocations.find(l=>l.slug===slug) || null;
-  }else{
-    // Backward compatibility with direct display-config slugs.
-    activeDisplaySlug=slug;
-  }
-
-  showView("display");
-  renderDisplay();
-  return true;
-}
-
-async function loadServiceCatalog(){
-  const { data, error } = await supabaseClient
-    .from("service_catalog")
-    .select("id,department,section,service_name,requires_college,requires_letter,ticket_prefix,active,sort_order")
-    .order("sort_order",{ascending:true});
-
-  if(error){
-    console.error("Service catalog load failed:", error);
-    return false;
-  }
-
-  serviceCatalog=data || [];
-  return true;
-}
-
-function sectionLabel(value){
-  const map={
-    reception:"قسم الاستقبال",
-    activity:"قسم نشاط الخريج",
-    graduation:"قسم شؤون التخرج"
-  };
-  return map[value] || "—";
-}
-
-function serviceRouteRule(dept,section){
-  if(dept==="registration" || dept==="admissions" || dept==="independent") return {college:false,letter:false,locked:true};
-  if(dept==="records") return {college:null,letter:false,locked:false};
-  const dynamicDept=customDepartment(dept);
-  if(dynamicDept && !dynamicDept.built_in) return {college:false,letter:false,locked:true};
-  if(dept==="graduates" && section==="reception") return {college:false,letter:false,locked:true};
-  if(dept==="graduates" && ["activity","graduation"].includes(section)) return {college:true,letter:true,locked:true};
-  return {college:false,letter:false,locked:true};
 }
 
 async function openServiceManagement(){
