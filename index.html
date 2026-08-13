@@ -178,12 +178,12 @@
             <button class="btn primary" onclick="showView('admin')">مدير النظام</button>
           </div>
 
-          <p class="muted">اختر موقع العمل الحالي ثم قائمة الانتظار التي سيخدمها هذا الكاونتر من الصلاحيات التي حددها مدير النظام.</p>
+          <p class="muted">اختر موقع الخدمة الحالي والكاونتر. ستظهر فقط قوائم الانتظار المصرح لك بها ضمن الإدارات المحددة لهذا الموقع.</p>
 
           <div class="field" style="margin-top:12px">
-            <label>شاشة النداء / موقع الخدمة</label>
+            <label>موقع الخدمة</label>
             <select id="staffDisplayDestination" onchange="staffDisplayDestinationChanged()">
-              <option value="">اختر شاشة النداء</option>
+              <option value="">اختر موقع الخدمة</option>
             </select>
           </div>
 
@@ -257,7 +257,7 @@
           <button class="btn" onclick="openServiceLocationManagement()">مواقع الخدمة / صفحات QR</button>
           <button class="btn" onclick="openDepartmentManagement()">إدارة الإدارات</button>
           <button class="btn" onclick="openHallManagement()">إدارة القاعات</button>
-          <button class="btn" onclick="openDisplayManagement()">إدارة شاشات النداء</button>
+          
           <button class="btn" onclick="openServiceManagement()">إدارة الخدمات</button>
           <button class="btn primary" onclick="openAddUserForm()">+ إضافة مستخدم</button>
         </div>
@@ -492,7 +492,7 @@
         </div>
       </div>
 
-      <div id="displayManagementPanel" class="card hidden" style="box-shadow:none;margin:0 0 18px;padding:18px;background:#f8fafc">
+      <div id="displayManagementPanel" style="display:none!important" class="card hidden" style="box-shadow:none;margin:0 0 18px;padding:18px;background:#f8fafc">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
           <div>
             <h4 style="margin:0 0 4px">إدارة شاشات النداء</h4>
@@ -1362,6 +1362,10 @@ async function staffLogin(){
     hallId:null,
     hallName:"غير معين",
     hallSlug:"",
+    locationId:null,
+    locationSlug:"",
+    locationName:"غير معين",
+    locationDepartments:[],
     displaySlug:"",
     displayName:"غير معين",
     displayRequiresCounter:false,
@@ -1380,6 +1384,7 @@ async function staffLogin(){
   document.getElementById("staffLogin").classList.add("hidden");
   document.getElementById("staffPanel").classList.remove("hidden");
   await loadHallsAndDisplays();
+  await loadServiceLocations();
   await loadAvailableWorkCounters();
   renderPermissions();
   await refreshStaff();
@@ -1420,11 +1425,11 @@ function populateStaffDisplayDestinations(){
   const el=document.getElementById("staffDisplayDestination");
   if(!el) return;
 
-  const current=staff?.displaySlug || el.value;
-  const activeScreens=(displayConfigs || []).filter(d=>d.active);
+  const current=staff?.locationSlug || el.value;
+  const activeLocations=(serviceLocations || []).filter(l=>l.active && l.display_configs?.active);
 
-  el.innerHTML=`<option value="">اختر شاشة النداء</option>` +
-    activeScreens.map(d=>`<option value="${d.slug}">${d.name}</option>`).join("");
+  el.innerHTML=`<option value="">اختر موقع الخدمة</option>` +
+    activeLocations.map(l=>`<option value="${l.slug}">${l.name}</option>`).join("");
 
   if([...el.options].some(o=>o.value===current)){
     el.value=current;
@@ -1433,9 +1438,22 @@ function populateStaffDisplayDestinations(){
   staffDisplayDestinationChanged();
 }
 
-function selectedStaffDisplay(){
+function selectedStaffLocation(){
   const slug=document.getElementById("staffDisplayDestination")?.value || "";
-  return (displayConfigs || []).find(d=>d.slug===slug && d.active) || null;
+  return (serviceLocations || []).find(l=>l.slug===slug && l.active) || null;
+}
+
+function locationDisplayConfig(location){
+  if(!location) return null;
+  return (displayConfigs || []).find(
+    d=>Number(d.id)===Number(location.display_id) && d.active
+  ) || null;
+}
+
+function locationDepartmentSlugsForStaff(location){
+  return (location?.service_location_departments || [])
+    .map(x=>x.department)
+    .filter(Boolean);
 }
 
 function displayRequiresCounter(cfg){
@@ -1443,14 +1461,16 @@ function displayRequiresCounter(cfg){
 }
 
 function staffDisplayDestinationChanged(){
-  const cfg=selectedStaffDisplay();
+  const location=selectedStaffLocation();
+  const cfg=locationDisplayConfig(location);
   const wrap=document.getElementById("staffCounterWrap");
   const counterEl=document.getElementById("staffWorkstation");
   if(!wrap || !counterEl) return;
 
-  if(!cfg || !displayRequiresCounter(cfg)){
+  if(!location || !cfg || !displayRequiresCounter(cfg)){
     wrap.classList.add("hidden");
     counterEl.innerHTML=`<option value="">غير مطلوب</option>`;
+    renderAuthorizedQueueSelector();
     return;
   }
 
@@ -1471,22 +1491,34 @@ function staffDisplayDestinationChanged(){
   if(staff?.counterId && [...counterEl.options].some(o=>o.value===String(staff.counterId))){
     counterEl.value=String(staff.counterId);
   }
+
+  renderAuthorizedQueueSelector();
 }
 
-function displayMatchesTicket(cfg,t){
-  if(!cfg || !t) return false;
-  if(cfg.department && t.dept!==cfg.department) return false;
-  if(cfg.section && t.section!==cfg.section) return false;
-  if(cfg.service && t.service!==cfg.service) return false;
-  return true;
+function locationAllowsTicket(location,t){
+  if(!location || !t) return false;
+  const allowed=locationDepartmentSlugsForStaff(location);
+  return allowed.includes(t.dept);
 }
 
 async function applyStaffWorkstation(){
   if(!staff) return;
 
-  const cfg=selectedStaffDisplay();
+  const location=selectedStaffLocation();
+  if(!location){
+    alert("يرجى اختيار موقع الخدمة.");
+    return;
+  }
+
+  const cfg=locationDisplayConfig(location);
   if(!cfg){
-    alert("يرجى اختيار شاشة النداء / موقع الخدمة.");
+    alert("لا توجد شاشة نداء فعالة مرتبطة بهذا الموقع.");
+    return;
+  }
+
+  const locationDepartments=locationDepartmentSlugsForStaff(location);
+  if(!locationDepartments.length){
+    alert("لم يتم تحديد إدارات لهذا الموقع.");
     return;
   }
 
@@ -1505,7 +1537,23 @@ async function applyStaffWorkstation(){
       alert("الكاونتر المحدد غير متاح.");
       return;
     }
+
+    if(cfg.hall_id && Number(row.hall_id)!==Number(cfg.hall_id)){
+      alert("الكاونتر المحدد لا يتبع موقع الخدمة.");
+      return;
+    }
+
+    if(Array.isArray(cfg.counter_numbers) && cfg.counter_numbers.length &&
+       !cfg.counter_numbers.includes(Number(row.counter_number))){
+      alert("الكاونتر المحدد غير مخصص لهذا الموقع.");
+      return;
+    }
   }
+
+  staff.locationId=location.id;
+  staff.locationSlug=location.slug;
+  staff.locationName=location.name;
+  staff.locationDepartments=[...locationDepartments];
 
   staff.displaySlug=cfg.slug;
   staff.displayName=cfg.name;
@@ -1515,15 +1563,27 @@ async function applyStaffWorkstation(){
     staff.counterId=row.id;
     staff.counter=String(row.counter_number);
     staff.hallId=row.hall_id || cfg.hall_id || null;
-    staff.hallName=row.hall_id ? (row.halls?.name || "غير معين") : "بدون قاعة";
+    staff.hallName=row.hall_id ? (row.halls?.name || location.name) : location.name;
     staff.hallSlug=row.hall_id ? (row.halls?.slug || "") : "";
   }else{
     staff.counterId=null;
     staff.counter="";
     staff.hallId=cfg.hall_id || null;
     const hall=(halls || []).find(h=>Number(h.id)===Number(cfg.hall_id));
-    staff.hallName=hall?.name || "بدون قاعة";
+    staff.hallName=hall?.name || location.name;
     staff.hallSlug=hall?.slug || "";
+  }
+
+  // A change of physical location may invalidate previously selected queues.
+  // Keep only queues that are both centrally authorized and belong to this location.
+  const allowedAtLocation=(staff.centralPermissions || []).filter(key=>{
+    const dept=String(key||"").split("|")[0];
+    return staff.locationDepartments.includes(dept);
+  });
+  const previous=staff.activePermissions || [];
+  staff.activePermissions=previous.filter(k=>allowedAtLocation.includes(k));
+  if(!staff.activePermissions.length){
+    staff.activePermissions=[...allowedAtLocation];
   }
 
   renderPermissions();
@@ -1558,7 +1618,7 @@ function permissionKeyLabel(key){
 function renderPermissions(){
   const roleLabel=staff.role==="superuser" ? "مدير النظام" : "موظف";
   const counterPart=staff.counter ? ` — الكاونتر: <b>${staff.counter}</b>` : "";
-  document.getElementById("staffIdentity").innerHTML=`الموظف: <b>${staff.name}</b> — الصلاحية: <b>${roleLabel}</b> — شاشة النداء: <b>${staff.displayName || "غير معين"}</b>${counterPart}`;
+  document.getElementById("staffIdentity").innerHTML=`الموظف: <b>${staff.name}</b> — الصلاحية: <b>${roleLabel}</b> — موقع الخدمة: <b>${staff.locationName || "غير معين"}</b>${counterPart}`;
 
   populateStaffDisplayDestinations();
   renderAuthorizedQueueSelector();
@@ -1570,15 +1630,26 @@ function renderAuthorizedQueueSelector(){
   if(!box || !staff) return;
 
   const central=staff.centralPermissions || staff.permissions || [];
-  const active=staff.activePermissions || central;
 
-  if(!central.length){
-    box.innerHTML=`<div class="muted">لا توجد قوائم انتظار مصرح بها لهذا المستخدم. يرجى مراجعة مدير النظام.</div>`;
-    summary.textContent="لا توجد قائمة انتظار نشطة.";
+  if(!staff.locationSlug){
+    box.innerHTML=`<div class="muted">يرجى اختيار موقع الخدمة أولاً.</div>`;
+    summary.textContent="لم يتم تحديد موقع الخدمة.";
     return;
   }
 
-  box.innerHTML=central.map((key,i)=>`
+  const locationAllowed=central.filter(key=>{
+    const dept=String(key||"").split("|")[0];
+    return (staff.locationDepartments || []).includes(dept);
+  });
+  const active=staff.activePermissions || locationAllowed;
+
+  if(!locationAllowed.length){
+    box.innerHTML=`<div class="muted">لا توجد قوائم انتظار مشتركة بين صلاحيات هذا المستخدم وإدارات موقع الخدمة المحدد.</div>`;
+    summary.textContent="لا توجد قائمة انتظار متاحة في هذا الموقع.";
+    return;
+  }
+
+  box.innerHTML=locationAllowed.map((key,i)=>`
     <label class="check">
       <input type="checkbox"
              class="authorized-queue"
@@ -1628,8 +1699,15 @@ async function applyAuthorizedQueueSelection(){
     return;
   }
 
-  // Never allow the counter to activate a route outside the superuser-granted permissions.
-  const allowed=new Set(staff.centralPermissions || []);
+  // Never allow the counter to activate a route outside either:
+  // (1) the superuser-granted permissions, or
+  // (2) the departments assigned to the selected service location.
+  const allowed=new Set(
+    (staff.centralPermissions || []).filter(key=>{
+      const dept=String(key||"").split("|")[0];
+      return (staff.locationDepartments || []).includes(dept);
+    })
+  );
   staff.activePermissions=selected.filter(x=>allowed.has(x));
   staff.permissions=[...staff.centralPermissions];
 
@@ -1821,10 +1899,15 @@ async function eligibleTickets(){
     return [];
   }
 
-  const activePermissions=staff.activePermissions || staff.centralPermissions || staff.permissions || [];
+  if(!staff.locationSlug) return [];
+
+  const activePermissions=staff.activePermissions || [];
   return (data || [])
     .map(normalizeDbTicket)
-    .filter(t=>activePermissions.includes(routeKey(t)));
+    .filter(t=>
+      (staff.locationDepartments || []).includes(t.dept) &&
+      activePermissions.includes(routeKey(t))
+    );
 }
 
 async function refreshStaff(){
@@ -1887,12 +1970,12 @@ function renderCurrent(){
     <div><b>${current.service}</b></div>
     ${current.college?`<div>${current.college}</div>`:""}
     ${current.range?`<div>الحروف: ${current.range}</div>`:""}
-    <div style="margin-top:10px"><span class="tag">كاونتر ${staff.counter}</span></div>`;
+    <div style="margin-top:10px"><span class="tag">${staff.counter ? `كاونتر ${staff.counter}` : staff.locationName}</span></div>`;
 }
 
 async function callNext(){
-  if(!staff?.displaySlug){
-    alert("يرجى تحديد شاشة النداء / موقع الخدمة قبل نداء أي رقم.");
+  if(!staff?.locationSlug){
+    alert("يرجى تحديد موقع الخدمة قبل نداء أي رقم.");
     return;
   }
   if(staff.displayRequiresCounter && !staff.counterId){
@@ -1915,8 +1998,8 @@ async function callNext(){
 }
 
 async function callTicketById(ticketId){
-  if(!staff?.displaySlug){
-    alert("يرجى تحديد شاشة النداء / موقع الخدمة قبل نداء أي رقم.");
+  if(!staff?.locationSlug){
+    alert("يرجى تحديد موقع الخدمة قبل نداء أي رقم.");
     return;
   }
   if(staff.displayRequiresCounter && !staff.counterId){
@@ -1938,9 +2021,17 @@ async function callTicketById(ticketId){
     return;
   }
 
-  const cfg=selectedStaffDisplay();
-  if(!cfg || !displayMatchesTicket(cfg,candidate)){
-    alert("شاشة النداء المحددة لا تتوافق مع قائمة انتظار هذا الدور. يرجى اختيار شاشة النداء المناسبة.");
+  const location=(serviceLocations || []).find(
+    l=>l.slug===staff.locationSlug && l.active
+  );
+  if(!location || !locationAllowsTicket(location,candidate)){
+    alert("هذا الدور لا يتبع الإدارات المحددة لموقع الخدمة الحالي.");
+    return;
+  }
+
+  const cfg=locationDisplayConfig(location);
+  if(!cfg){
+    alert("لا توجد شاشة نداء فعالة مرتبطة بموقع الخدمة الحالي.");
     return;
   }
 
@@ -2153,6 +2244,7 @@ async function loadServiceLocations(){
   serviceLocations=data||[];
   const el=document.getElementById("locationDisplay");
   if(el) el.innerHTML=`<option value="">اختر شاشة النداء</option>`+(displayConfigs||[]).filter(d=>d.active).map(d=>`<option value="${d.id}">${d.name}</option>`).join("");
+  if(staff) populateStaffDisplayDestinations();
   return true;
 }
 
@@ -2275,7 +2367,7 @@ function renderServiceLocationAdminTable(){
         <button class="btn" onclick="editServiceLocation(${l.id})">تعديل</button>
         <button class="btn" onclick="openLocationServices(${l.id})">الإدارات</button>
         <button class="btn" onclick="copyTextUrl(visitorLocationUrl('${l.slug}'),'تم نسخ رابط المراجع / QR.')">رابط المراجع / QR</button>
-        <button class="btn" onclick="window.open(screenLocationUrl('${l.slug}'),'_blank')">فتح شاشة النداء</button>
+        <button class="btn" onclick="copyTextUrl(screenLocationUrl('${l.slug}'),'تم نسخ رابط شاشة النداء.')">رابط شاشة النداء</button>
         <button class="btn" onclick="toggleServiceLocation(${l.id},${l.active?"false":"true"})">${l.active?"إيقاف":"تفعيل"}</button>
       </div>
     </td>
