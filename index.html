@@ -368,9 +368,12 @@
           <div class="field"><label>ترتيب العرض</label><input id="locationSort" type="number" value="100"></div>
         </div>
         <div id="locationAdminMessage" class="notice hidden"></div>
-        <div class="actions"><button class="btn primary" onclick="saveServiceLocation()">إضافة الموقع</button></div>
+        <div class="actions">
+          <button class="btn primary" id="saveLocationBtn" onclick="saveServiceLocation()">إضافة الموقع</button>
+          <button class="btn hidden" id="cancelLocationEditBtn" onclick="cancelServiceLocationEdit()">إلغاء التعديل</button>
+        </div>
         <div style="overflow:auto;margin-top:18px"><table style="width:100%;border-collapse:collapse;min-width:850px">
-          <thead><tr><th>الموقع</th><th>شاشة النداء</th><th>الخدمات</th><th>الحالة</th><th>إجراء</th></tr></thead>
+          <thead><tr><th>الموقع</th><th>شاشة النداء</th><th>الإدارات</th><th>الحالة</th><th>إجراء</th></tr></thead>
           <tbody id="locationAdminTable"></tbody>
         </table></div>
       </div>
@@ -893,6 +896,7 @@ let departmentCatalog = [];
 let serviceLocations=[];
 let currentServiceLocation=null;
 let selectedLocationAdmin=null;
+let editingServiceLocationId=null;
 let visitorIssuedTicket=null;
 let halls = [];
 let displayConfigs = [];
@@ -2135,13 +2139,6 @@ async function loadServiceLocations(){
   return true;
 }
 
-function serviceLocationUrl(slug){
-  const url=new URL(window.location.href); url.search=""; url.hash=""; url.searchParams.set("location",slug); return url.toString();
-}
-async function copyServiceLocationUrl(slug){
-  const url=serviceLocationUrl(slug);
-  try{ await navigator.clipboard.writeText(url); alert("تم نسخ رابط صفحة الموقع."); }catch{ prompt("رابط صفحة الموقع:",url); }
-}
 async function openServiceLocationManagement(){
   hideAdminSubpanels("serviceLocationManagementPanel");
   document.getElementById("serviceLocationManagementPanel").classList.remove("hidden");
@@ -2152,18 +2149,103 @@ function closeServiceLocationManagement(){
   document.getElementById("serviceLocationManagementPanel").classList.add("hidden");
   document.getElementById("locationServicesPanel").classList.add("hidden");
 }
+function resetServiceLocationForm(){
+  editingServiceLocationId=null;
+  document.getElementById("locationName").value="";
+  document.getElementById("locationSlug").value="";
+  document.getElementById("locationDisplay").value="";
+  document.getElementById("locationSort").value="100";
+  const saveBtn=document.getElementById("saveLocationBtn");
+  const cancelBtn=document.getElementById("cancelLocationEditBtn");
+  if(saveBtn) saveBtn.textContent="إضافة الموقع";
+  if(cancelBtn) cancelBtn.classList.add("hidden");
+}
+
+function editServiceLocation(id){
+  const l=serviceLocations.find(x=>Number(x.id)===Number(id));
+  if(!l) return;
+
+  editingServiceLocationId=l.id;
+  document.getElementById("locationName").value=l.name || "";
+  document.getElementById("locationSlug").value=l.slug || "";
+  document.getElementById("locationDisplay").value=l.display_id || "";
+  document.getElementById("locationSort").value=l.sort_order ?? 100;
+
+  const saveBtn=document.getElementById("saveLocationBtn");
+  const cancelBtn=document.getElementById("cancelLocationEditBtn");
+  if(saveBtn) saveBtn.textContent="حفظ التعديل";
+  if(cancelBtn) cancelBtn.classList.remove("hidden");
+
+  document.getElementById("serviceLocationManagementPanel").scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+function cancelServiceLocationEdit(){
+  resetServiceLocationForm();
+}
+
 async function saveServiceLocation(){
   const name=document.getElementById("locationName").value.trim();
   const slug=normalizeSlug(document.getElementById("locationSlug").value);
   const display_id=Number(document.getElementById("locationDisplay").value||0)||null;
   const sort_order=Number(document.getElementById("locationSort").value||100);
   const msg=document.getElementById("locationAdminMessage");
-  if(!name||!slug||!display_id){ msg.textContent="يرجى استكمال اسم الموقع ورمز الرابط وشاشة النداء."; msg.classList.remove("hidden"); return; }
-  const {error}=await supabaseClient.from("service_locations").insert({name,slug,display_id,active:true,sort_order});
-  if(error){ msg.textContent=error.message; msg.classList.remove("hidden"); return; }
-  msg.textContent="تمت إضافة الموقع."; msg.classList.remove("hidden");
-  await loadServiceLocations(); renderServiceLocationAdminTable();
+
+  if(!name||!slug||!display_id){
+    msg.textContent="يرجى استكمال اسم الموقع ورمز الرابط وشاشة النداء.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  let error=null;
+  if(editingServiceLocationId){
+    ({error}=await supabaseClient
+      .from("service_locations")
+      .update({name,slug,display_id,sort_order})
+      .eq("id",editingServiceLocationId));
+  }else{
+    ({error}=await supabaseClient
+      .from("service_locations")
+      .insert({name,slug,display_id,active:true,sort_order}));
+  }
+
+  if(error){
+    msg.textContent=error.code==="23505" ? "رمز الرابط أو اسم الموقع مستخدم مسبقاً." : error.message;
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  msg.textContent=editingServiceLocationId ? "تم حفظ التعديل." : "تمت إضافة الموقع.";
+  msg.classList.remove("hidden");
+  resetServiceLocationForm();
+  await loadServiceLocations();
+  renderServiceLocationAdminTable();
 }
+
+function visitorLocationUrl(slug){
+  const url=new URL(window.location.href);
+  url.search="";
+  url.hash="";
+  url.searchParams.set("location",slug);
+  return url.toString();
+}
+
+function screenLocationUrl(slug){
+  const url=new URL(window.location.href);
+  url.search="";
+  url.hash="";
+  url.searchParams.set("display",slug);
+  return url.toString();
+}
+
+async function copyTextUrl(url,message){
+  try{
+    await navigator.clipboard.writeText(url);
+    alert(message);
+  }catch{
+    prompt(message,url);
+  }
+}
+
 function renderServiceLocationAdminTable(){
   const body=document.getElementById("locationAdminTable");
   body.innerHTML=(serviceLocations||[]).map(l=>`<tr>
@@ -2171,11 +2253,18 @@ function renderServiceLocationAdminTable(){
     <td>${l.display_configs?.name||"—"}</td>
     <td>${(l.service_location_departments||[]).length} إدارة</td>
     <td>${l.active?"نشط":"موقوف"}</td>
-    <td><button class="btn" onclick="openLocationServices(${l.id})">الإدارات</button>
-    <button class="btn" onclick="copyServiceLocationUrl('${l.slug}')">نسخ رابط QR</button>
-    <button class="btn" onclick="toggleServiceLocation(${l.id},${l.active?"false":"true"})">${l.active?"إيقاف":"تفعيل"}</button></td>
+    <td>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn" onclick="editServiceLocation(${l.id})">تعديل</button>
+        <button class="btn" onclick="openLocationServices(${l.id})">الإدارات</button>
+        <button class="btn" onclick="copyTextUrl(visitorLocationUrl('${l.slug}'),'تم نسخ رابط المراجع / QR.')">رابط المراجع</button>
+        <button class="btn" onclick="copyTextUrl(screenLocationUrl('${l.slug}'),'تم نسخ رابط شاشة النداء.')">رابط الشاشة</button>
+        <button class="btn" onclick="toggleServiceLocation(${l.id},${l.active?"false":"true"})">${l.active?"إيقاف":"تفعيل"}</button>
+      </div>
+    </td>
   </tr>`).join("");
 }
+
 async function toggleServiceLocation(id,active){
   await supabaseClient.from("service_locations").update({active}).eq("id",id);
   await loadServiceLocations(); renderServiceLocationAdminTable();
@@ -2240,12 +2329,49 @@ async function saveLocationServices(){
   await loadServiceLocations();
   renderServiceLocationAdminTable();
 }
+function hideSpecialModeChrome(){
+  // Hide the main tab buttons and any top-left navigation/actions.
+  document.querySelectorAll(
+    ".tabs,.top-actions,.nav-actions,#topActions,#adminNavBtn,#visitorNavBtn,#staffNavBtn,#displayNavBtn"
+  ).forEach(el=>el.classList.add("hidden"));
+}
+
+function restoreGeneralChrome(){
+  document.querySelectorAll(".tabs,.top-actions,.nav-actions,#topActions")
+    .forEach(el=>el.classList.remove("hidden"));
+}
+
+function persistVisitorTicket(locationSlug,ticketNumber){
+  if(!locationSlug || !ticketNumber) return;
+  try{
+    sessionStorage.setItem(`ku_queue_ticket_${locationSlug}`,ticketNumber);
+  }catch{}
+}
+
+function loadPersistedVisitorTicket(locationSlug){
+  if(!locationSlug) return null;
+  try{
+    return sessionStorage.getItem(`ku_queue_ticket_${locationSlug}`);
+  }catch{
+    return null;
+  }
+}
+
 async function resolveLocationFromUrl(){
   const slug=new URL(window.location.href).searchParams.get("location"); if(!slug)return false;
   await loadServiceLocations();
   currentServiceLocation=serviceLocations.find(l=>l.slug===slug&&l.active)||null;
   if(!currentServiceLocation)return false;
-  renderLocationVisitorHome(); return true;
+
+  hideSpecialModeChrome();
+
+  const persisted=loadPersistedVisitorTicket(currentServiceLocation.slug);
+  if(persisted){
+    visitorIssuedTicket={ticket_number:persisted,number:persisted};
+  }
+
+  renderLocationVisitorHome();
+  return true;
 }
 function locationDepartmentSlugs(){
   return (currentServiceLocation?.service_location_departments||[])
@@ -2256,8 +2382,7 @@ function renderLocationVisitorHome(){
   if(!currentServiceLocation)return;
 
   showView("visitor");
-  document.querySelectorAll(".top-actions,.nav-actions,#topActions")
-    .forEach(el=>el.classList.add("hidden"));
+  hideSpecialModeChrome();
 
   const vc=document.getElementById("visitorContent");
   if(!vc)return;
@@ -2295,8 +2420,25 @@ function chooseLocationDepartment(dept){
 }
 function showLocationDisplayAfterTicket(ticket){
   visitorIssuedTicket=ticket||visitorIssuedTicket;
-  const d=currentServiceLocation?.display_configs; if(!d?.slug)return;
-  activeDisplaySlug=d.slug; showView("display"); renderDisplay();
+
+  const ticketNumber=
+    visitorIssuedTicket?.number ||
+    visitorIssuedTicket?.ticket_number ||
+    visitorState?.ticket?.number ||
+    visitorState?.ticket?.ticket_number ||
+    null;
+
+  if(currentServiceLocation?.slug && ticketNumber){
+    persistVisitorTicket(currentServiceLocation.slug,ticketNumber);
+  }
+
+  const d=currentServiceLocation?.display_configs;
+  if(!d?.slug)return;
+
+  hideSpecialModeChrome();
+  activeDisplaySlug=d.slug;
+  showView("display");
+  renderDisplay();
 }
 
 async function loadDepartmentCatalog(){
@@ -2764,8 +2906,20 @@ async function applyDisplayUrl(){
   const slug=new URL(window.location.href).searchParams.get("display");
   if(!slug) return false;
 
-  activeDisplaySlug=slug;
-  await loadHallsAndDisplays();
+  hideSpecialModeChrome();
+
+  // Preferred public screen link: ?display=<location-slug>
+  const {data:resolved,error:resolveError}=await supabaseClient
+    .rpc("resolve_location_display",{p_location_slug:slug});
+
+  if(!resolveError && resolved && resolved.length){
+    activeDisplaySlug=resolved[0].display_slug;
+    currentServiceLocation=serviceLocations.find(l=>l.slug===slug) || null;
+  }else{
+    // Backward compatibility with direct display-config slugs.
+    activeDisplaySlug=slug;
+  }
+
   showView("display");
   renderDisplay();
   return true;
@@ -3734,7 +3888,11 @@ async function handleRecoveryMode(){
     const locationMode=await resolveLocationFromUrl();
     if(!locationMode){
       const displayMode=await applyDisplayUrl();
-      if(!displayMode){ visitorHome(); renderDisplay(); }
+      if(!displayMode){
+        restoreGeneralChrome();
+        visitorHome();
+        renderDisplay();
+      }
     }
   }
 })();
