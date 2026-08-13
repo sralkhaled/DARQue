@@ -376,7 +376,7 @@
               تحديد جميع الإدارات
             </label>
           </div>
-          <div id="locationDepartmentsChecklist" class="checklist" style="margin-top:10px"></div>
+          <div id="locationDepartmentsChecklist" class="checklist" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px"></div>
         </div>
 
         <div id="locationAdminMessage" class="notice hidden"></div>
@@ -2171,39 +2171,110 @@ async function loadServiceLocations(){
 async function openServiceLocationManagement(){
   hideAdminSubpanels("serviceLocationManagementPanel");
   document.getElementById("serviceLocationManagementPanel").classList.remove("hidden");
-  await Promise.all([loadDepartmentCatalog(),loadHallsAndDisplays(),loadServiceLocations(),loadServiceCatalog()]);
-  renderLocationDepartmentsChecklist([]);
+
+  // Load in a deterministic order. serviceCatalog also acts as a safe
+  // fallback source if department_catalog is temporarily unavailable.
+  await loadServiceCatalog();
+  await loadDepartmentCatalog();
+  await loadHallsAndDisplays();
+  await loadServiceLocations();
+
+  resetServiceLocationForm();
   renderServiceLocationAdminTable();
 }
 function closeServiceLocationManagement(){
   document.getElementById("serviceLocationManagementPanel").classList.add("hidden");
 }
+function locationDepartmentChoices(){
+  const map=new Map();
+
+  // Primary source: central department catalog.
+  (departmentCatalog || [])
+    .filter(d=>d.active && d.slug!=="independent")
+    .forEach(d=>map.set(d.slug,{
+      slug:d.slug,
+      name:d.name,
+      sort_order:Number(d.sort_order ?? 100)
+    }));
+
+  // Built-in configuration fallback.
+  Object.entries(departments || {}).forEach(([slug,cfg],i)=>{
+    if(slug==="independent") return;
+    if(!map.has(slug)){
+      map.set(slug,{
+        slug,
+        name:cfg?.name || slug,
+        sort_order:(i+1)*10
+      });
+    }
+  });
+
+  // Final fallback: any department that actually has services configured.
+  (serviceCatalog || []).forEach((svc,i)=>{
+    const slug=svc.department;
+    if(!slug || slug==="independent" || map.has(slug)) return;
+
+    const catalogRow=(departmentCatalog || []).find(d=>d.slug===slug);
+    const builtIn=departments?.[slug];
+    map.set(slug,{
+      slug,
+      name:catalogRow?.name || builtIn?.name || svc.department,
+      sort_order:Number(catalogRow?.sort_order ?? 500+i)
+    });
+  });
+
+  return [...map.values()].sort((a,b)=>
+    (a.sort_order-b.sort_order) || a.name.localeCompare(b.name,"ar")
+  );
+}
+
 function renderLocationDepartmentsChecklist(selectedDepartments=[]){
   const box=document.getElementById("locationDepartmentsChecklist");
+  const selectAll=document.getElementById("locationSelectAllDepartments");
   if(!box) return;
 
+  const choices=locationDepartmentChoices();
   const selected=new Set(selectedDepartments || []);
-  box.innerHTML=(departmentCatalog || [])
-    .filter(d=>d.active && d.slug!=="independent")
-    .map(d=>`
-      <label class="check">
-        <input class="location-department-checkbox"
-               type="checkbox"
-               value="${d.slug}"
-               ${selected.has(d.slug) ? "checked" : ""}>
-        ${d.name}
-      </label>`).join("");
 
-  const all=document.querySelectorAll(".location-department-checkbox");
-  const allChecked=all.length>0 && [...all].every(x=>x.checked);
-  const selectAll=document.getElementById("locationSelectAllDepartments");
-  if(selectAll) selectAll.checked=allChecked;
+  if(!choices.length){
+    box.innerHTML=`
+      <div class="notice" style="margin:0">
+        تعذر تحميل قائمة الإدارات. يرجى إغلاق النافذة وإعادة فتحها.
+      </div>`;
+    if(selectAll){
+      selectAll.checked=false;
+      selectAll.disabled=true;
+    }
+    return;
+  }
+
+  box.innerHTML=choices.map(d=>`
+    <label class="check" style="min-width:220px">
+      <input class="location-department-checkbox"
+             type="checkbox"
+             value="${d.slug}"
+             ${selected.has(d.slug) ? "checked" : ""}>
+      <span>${d.name}</span>
+    </label>`).join("");
+
+  if(selectAll){
+    selectAll.disabled=false;
+    const all=[...document.querySelectorAll(".location-department-checkbox")];
+    selectAll.checked=all.length>0 && all.every(x=>x.checked);
+  }
 }
 
 function toggleAllLocationDepartments(checked){
   document.querySelectorAll(".location-department-checkbox")
     .forEach(x=>x.checked=checked);
 }
+
+document.addEventListener("change",e=>{
+  if(!e.target.classList?.contains("location-department-checkbox")) return;
+  const all=[...document.querySelectorAll(".location-department-checkbox")];
+  const selectAll=document.getElementById("locationSelectAllDepartments");
+  if(selectAll) selectAll.checked=all.length>0 && all.every(x=>x.checked);
+});
 
 function selectedLocationDepartments(){
   return [...document.querySelectorAll(".location-department-checkbox:checked")]
@@ -2212,6 +2283,13 @@ function selectedLocationDepartments(){
 
 function resetServiceLocationForm(){
   editingServiceLocationId=null;
+
+  const msg=document.getElementById("locationAdminMessage");
+  if(msg){
+    msg.textContent="";
+    msg.classList.add("hidden");
+  }
+
   document.getElementById("locationName").value="";
   document.getElementById("locationSlug").value="";
   document.getElementById("locationDisplay").value="";
@@ -2228,6 +2306,12 @@ function resetServiceLocationForm(){
 function editServiceLocation(id){
   const l=serviceLocations.find(x=>Number(x.id)===Number(id));
   if(!l) return;
+
+  const msg=document.getElementById("locationAdminMessage");
+  if(msg){
+    msg.textContent="";
+    msg.classList.add("hidden");
+  }
 
   editingServiceLocationId=l.id;
   document.getElementById("locationName").value=l.name || "";
