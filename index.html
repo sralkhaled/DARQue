@@ -930,11 +930,19 @@ function visitorHome(){
       <p>يرجى اختيار الإدارة المطلوبة للحصول على رقم الانتظار</p>
     </div>
     <div class="grid">
-      ${departmentCatalog.filter(d=>d.active && d.slug!=="independent").map(d=>`
-        <div class="card choice" onclick="chooseDept('${d.slug}')">
+      ${departmentCatalog.filter(d=>d.active && d.slug!=="independent").map(d=>{
+        const descriptions={
+          registration:"خدمات التسجيل والمقررات",
+          records:"خدمات السجلات والمعاملات الأكاديمية",
+          admissions:"خدمات القبول والتقديم",
+          graduates:"الاستقبال ونشاط الخريج وشؤون التخرج"
+        };
+        const subtitle=descriptions[d.slug] || "";
+        return `<div class="card choice" onclick="chooseDept('${d.slug}')">
           <strong>${d.name}</strong>
-          <span>${d.slug==="graduates"?"اختر القسم ثم الخدمة":"اختر الخدمة"}</span>
-        </div>`).join("")}
+          ${subtitle?`<span>${subtitle}</span>`:""}
+        </div>`;
+      }).join("")}
       ${catalogServices("independent").map((s,i)=>`<div class="card choice" onclick="chooseIndependentService(${i})"><strong>${s.service_name}</strong><span>خدمة مستقلة</span></div>`).join("")}
     </div>`;
 }
