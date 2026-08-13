@@ -370,11 +370,13 @@
           <div><h4 style="margin:0">مواقع الخدمة / صفحات QR</h4><div class="muted">إدارة الموقع والإدارات المرتبطة ورابطي المراجع وشاشة النداء</div></div>
           <button class="btn" onclick="closeServiceLocationManagement()">إغلاق</button>
         </div>
-        <div class="grid" style="grid-template-columns:2fr 1.4fr 2fr 1fr;gap:12px;margin-top:14px">
+        <div class="grid" style="grid-template-columns:2fr 1.4fr 1fr;gap:12px;margin-top:14px">
           <div class="field"><label>اسم الموقع</label><input id="locationName" placeholder="مثال: صالة ١ أو مكتب العميد"></div>
           <div class="field"><label>رمز الرابط</label><input id="locationSlug" dir="ltr" placeholder="hall1"></div>
-          <div class="field"><label>شاشة النداء</label><select id="locationDisplay"></select></div>
           <div class="field"><label>ترتيب العرض</label><input id="locationSort" type="number" value="100"></div>
+        </div>
+        <div class="muted" style="margin-top:8px">
+          سيتم إنشاء وربط شاشة النداء الخاصة بهذا الموقع تلقائياً.
         </div>
 
         <div class="field" style="margin-top:16px">
@@ -2194,8 +2196,6 @@ async function loadServiceLocations(){
     .order("sort_order",{ascending:true});
   if(error){ console.error(error); serviceLocations=[]; return false; }
   serviceLocations=data||[];
-  const el=document.getElementById("locationDisplay");
-  if(el) el.innerHTML=`<option value="">اختر شاشة النداء</option>`+(displayConfigs||[]).filter(d=>d.active).map(d=>`<option value="${d.id}">${d.name}</option>`).join("");
   if(staff) populateStaffDisplayDestinations();
   return true;
 }
@@ -2327,7 +2327,6 @@ function resetServiceLocationForm(){
 
   document.getElementById("locationName").value="";
   document.getElementById("locationSlug").value="";
-  document.getElementById("locationDisplay").value="";
   document.getElementById("locationSort").value="100";
   renderLocationDepartmentsChecklist([]);
   const selectAll=document.getElementById("locationSelectAllDepartments");
@@ -2351,7 +2350,6 @@ function editServiceLocation(id){
   editingServiceLocationId=l.id;
   document.getElementById("locationName").value=l.name || "";
   document.getElementById("locationSlug").value=l.slug || "";
-  document.getElementById("locationDisplay").value=l.display_id || "";
   document.getElementById("locationSort").value=l.sort_order ?? 100;
   renderLocationDepartmentsChecklist(
     (l.service_location_departments || []).map(x=>x.department)
@@ -2392,16 +2390,96 @@ async function syncLocationDepartments(locationId,departments){
   }
 }
 
+function automaticDisplayName(locationName){
+  const clean=String(locationName||"").trim();
+  return clean.startsWith("شاشة ") ? clean : `شاشة ${clean}`;
+}
+
+function automaticDisplaySlug(locationSlug){
+  return `location-${locationSlug}-screen`;
+}
+
+function matchingHallForLocation(name,slug){
+  const normalizedName=String(name||"").trim();
+  return (halls || []).find(h=>
+    h.active !== false &&
+    (
+      h.slug===slug ||
+      String(h.name||"").trim()===normalizedName
+    )
+  ) || null;
+}
+
+async function ensureLocationDisplay({name,slug,existingDisplayId=null}){
+  const displayName=automaticDisplayName(name);
+
+  // Existing locations keep their current internal display record so
+  // existing counter/hall routing is preserved.
+  if(existingDisplayId){
+    const existing=(displayConfigs || []).find(
+      d=>Number(d.id)===Number(existingDisplayId)
+    );
+
+    if(existing){
+      const {error}=await supabaseClient
+        .from("display_configs")
+        .update({name:displayName,active:true})
+        .eq("id",existingDisplayId);
+
+      if(error) throw error;
+      return Number(existingDisplayId);
+    }
+  }
+
+  // New locations automatically get their own internal display.
+  // If the location matches an existing physical hall by slug or name,
+  // inherit that hall so counter selection remains automatic.
+  const hall=matchingHallForLocation(name,slug);
+  const displaySlug=automaticDisplaySlug(slug);
+
+  const existingAuto=(displayConfigs || []).find(d=>d.slug===displaySlug);
+  if(existingAuto){
+    const {error}=await supabaseClient
+      .from("display_configs")
+      .update({
+        name:displayName,
+        hall_id:hall?.id || existingAuto.hall_id || null,
+        active:true
+      })
+      .eq("id",existingAuto.id);
+
+    if(error) throw error;
+    return Number(existingAuto.id);
+  }
+
+  const {data,error}=await supabaseClient
+    .from("display_configs")
+    .insert({
+      name:displayName,
+      slug:displaySlug,
+      hall_id:hall?.id || null,
+      department:null,
+      section:null,
+      service:null,
+      counter_numbers:null,
+      active:true
+    })
+    .select("id")
+    .single();
+
+  if(error) throw error;
+  return Number(data.id);
+}
+
 async function saveServiceLocation(){
   const name=document.getElementById("locationName").value.trim();
   const slug=normalizeSlug(document.getElementById("locationSlug").value);
-  const display_id=Number(document.getElementById("locationDisplay").value||0)||null;
   const sort_order=Number(document.getElementById("locationSort").value||100);
   const departments=selectedLocationDepartments();
   const msg=document.getElementById("locationAdminMessage");
 
-  if(!name||!slug||!display_id){
-    msg.textContent="يرجى استكمال اسم الموقع ورمز الرابط وشاشة النداء.";
+  if(!name||!slug){
+    msg.textContent="يرجى استكمال اسم الموقع ورمز الرابط.";
     msg.classList.remove("hidden");
     return;
   }
@@ -2414,18 +2492,33 @@ async function saveServiceLocation(){
 
   try{
     let locationId=editingServiceLocationId;
+    const existingLocation=editingServiceLocationId
+      ? (serviceLocations || []).find(l=>Number(l.id)===Number(editingServiceLocationId)) || null
+      : null;
+
+    const displayId=await ensureLocationDisplay({
+      name,
+      slug,
+      existingDisplayId:existingLocation?.display_id || null
+    });
 
     if(editingServiceLocationId){
       const {error}=await supabaseClient
         .from("service_locations")
-        .update({name,slug,display_id,sort_order})
+        .update({name,slug,display_id:displayId,sort_order})
         .eq("id",editingServiceLocationId);
 
       if(error) throw error;
     }else{
       const {data,error}=await supabaseClient
         .from("service_locations")
-        .insert({name,slug,display_id,active:true,sort_order})
+        .insert({
+          name,
+          slug,
+          display_id:displayId,
+          active:true,
+          sort_order
+        })
         .select("id")
         .single();
 
@@ -2436,16 +2529,18 @@ async function saveServiceLocation(){
     await syncLocationDepartments(locationId,departments);
 
     msg.textContent=editingServiceLocationId
-      ? "تم حفظ تعديل الموقع والإدارات."
-      : "تمت إضافة الموقع والإدارات.";
+      ? "تم حفظ تعديل الموقع والإدارات وشاشة النداء."
+      : "تمت إضافة الموقع وإنشاء شاشة النداء تلقائياً.";
     msg.classList.remove("hidden");
 
     resetServiceLocationForm();
+    await loadHallsAndDisplays();
     await loadServiceLocations();
     renderServiceLocationAdminTable();
   }catch(error){
+    console.error("Location save failed:",error);
     msg.textContent=error?.code==="23505"
-      ? "رمز الرابط أو اسم الموقع مستخدم مسبقاً."
+      ? "رمز الرابط مستخدم مسبقاً."
       : (error?.message || "تعذر حفظ الموقع.");
     msg.classList.remove("hidden");
   }
@@ -2480,7 +2575,7 @@ function renderServiceLocationAdminTable(){
   const body=document.getElementById("locationAdminTable");
   body.innerHTML=(serviceLocations||[]).map(l=>`<tr>
     <td><b>${l.name}</b><br><small dir="ltr">${l.slug}</small></td>
-    <td>${l.display_configs?.name||"—"}</td>
+    <td>${l.display_configs?.name||"تلقائي"}</td>
     <td>${(l.service_location_departments||[]).length} إدارة</td>
     <td>${l.active?"نشط":"موقوف"}</td>
     <td>
