@@ -2332,15 +2332,19 @@ async function saveLocationServices(){
   renderServiceLocationAdminTable();
 }
 function hideSpecialModeChrome(){
-  // Hide the main tab buttons and any top-left navigation/actions.
+  // Dedicated QR and display URLs are kiosk-style pages:
+  // keep the KU header/branding, hide all navigation tabs/actions.
   document.querySelectorAll(
-    ".tabs,.top-actions,.nav-actions,#topActions,#adminNavBtn,#visitorNavBtn,#staffNavBtn,#displayNavBtn"
+    ".nav,.tabs,.top-actions,.nav-actions,#topActions,#adminNavBtn,#visitorNavBtn,#staffNavBtn,#displayNavBtn"
   ).forEach(el=>el.classList.add("hidden"));
 }
 
 function restoreGeneralChrome(){
-  document.querySelectorAll(".tabs,.top-actions,.nav-actions,#topActions")
+  document.querySelectorAll(".nav,.tabs,.top-actions,.nav-actions,#topActions")
     .forEach(el=>el.classList.remove("hidden"));
+
+  const displayControlBar=document.getElementById("displayControlBar");
+  if(displayControlBar) displayControlBar.classList.remove("hidden");
 }
 
 function persistVisitorTicket(locationSlug,ticketNumber){
@@ -2386,7 +2390,10 @@ function renderLocationVisitorHome(){
   showView("visitor");
   hideSpecialModeChrome();
 
-  const vc=document.getElementById("visitorContent");
+  const displayControlBar=document.getElementById("displayControlBar");
+  if(displayControlBar) displayControlBar.classList.add("hidden");
+
+  const vc=document.getElementById("visitorRoot");
   if(!vc)return;
 
   const allowed=new Set(locationDepartmentSlugs());
@@ -2396,10 +2403,10 @@ function renderLocationVisitorHome(){
 
   vc.innerHTML=`
     <div class="hero">
-      <h2>${currentServiceLocation.name}</h2>
-      <p>اختر الإدارة المطلوبة</p>
+      <h2>أهلاً بكم في عمادة القبول والتسجيل</h2>
+      <p>${currentServiceLocation.name} — يرجى اختيار الإدارة المطلوبة للحصول على رقم الانتظار</p>
     </div>
-    <div class="grid choices">
+    <div class="grid">
       ${departmentsForLocation.map(d=>{
         const descriptions={
           registration:"خدمات التسجيل والمقررات",
@@ -2438,6 +2445,10 @@ function showLocationDisplayAfterTicket(ticket){
   if(!d?.slug)return;
 
   hideSpecialModeChrome();
+
+  const displayControlBar=document.getElementById("displayControlBar");
+  if(displayControlBar) displayControlBar.classList.add("hidden");
+
   activeDisplaySlug=d.slug;
   showView("display");
   renderDisplay();
@@ -2998,6 +3009,9 @@ async function applyDisplayUrl(){
   if(!slug) return false;
 
   hideSpecialModeChrome();
+
+  const displayControlBar=document.getElementById("displayControlBar");
+  if(displayControlBar) displayControlBar.classList.add("hidden");
 
   // Preferred public screen link: ?display=<location-slug>
   const {data:resolved,error:resolveError}=await supabaseClient
