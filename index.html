@@ -1359,7 +1359,8 @@ async function issueTicket(){
     p_service: visitorState.service,
     p_college: visitorState.college || null,
     p_name_letter: visitorState.letter || null,
-    p_letter_range: range || null
+    p_letter_range: range || null,
+    p_location_slug: currentServiceLocation?.slug || null
   });
 
   if(error){
@@ -2845,7 +2846,9 @@ function normalizeDbTicket(row){
     status: row.status,
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
     calledAt: row.called_at ? new Date(row.called_at).getTime() : null,
-    counter: row.counter_number
+    counter: row.counter_number,
+    locationId: row.location_id ?? null,
+    queueDate: row.queue_date ?? null
   };
 }
 
@@ -2869,6 +2872,7 @@ async function eligibleTickets(){
   return (data || [])
     .map(normalizeDbTicket)
     .filter(t=>
+      (t.locationId==null || Number(t.locationId)===Number(staff.locationId)) &&
       (staff.locationDepartments || []).includes(t.dept) &&
       activePermissions.includes(routeKey(t))
     );
