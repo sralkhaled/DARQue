@@ -158,8 +158,8 @@
   <!-- PASSWORD RESET -->
   <section id="passwordReset" class="view">
     <div class="hero">
-      <h2>إعادة تعيين كلمة المرور</h2>
-      <p>يرجى إدخال كلمة المرور الجديدة</p>
+      <h2 id="passwordResetTitle">إعادة تعيين كلمة المرور</h2>
+      <p id="passwordResetSubtitle">يرجى إدخال كلمة المرور الجديدة</p>
     </div>
 
     <div class="card" style="max-width:560px;margin:auto">
@@ -198,7 +198,11 @@
         <label>كلمة المرور</label>
         <input id="staffPassword" type="password" placeholder="أدخل كلمة المرور" />
       </div>
-<button class="btn primary" onclick="staffLogin()">دخول</button>
+<div class="actions" style="margin-top:12px">
+        <button class="btn primary" onclick="staffLogin()">دخول</button>
+        <button class="btn" onclick="forgotPassword()">نسيت كلمة المرور؟</button>
+      </div>
+      <div id="forgotPasswordMessage" class="notice hidden" style="margin-top:12px"></div>
     </div>
 
     <div id="staffPanel" class="hidden">
@@ -371,32 +375,54 @@
         </div>
 
         <div class="guided-step" data-step="4">
-          <h3 class="section-title">الموظفون والصلاحيات</h3>
-          <p class="muted">يمكنك ربط موظف قائم أو إنشاء مستخدم جديد ومنحه خدمات هذا الموقع.</p>
+          <h3 class="section-title">الموظفون العاملون في هذا الموقع</h3>
+          <p class="muted">
+            أضف موظفاً واحداً أو أكثر، ثم حدد صلاحيات كل موظف بشكل مستقل ضمن خدمات هذا الموقع.
+          </p>
 
-          <div class="field">
-            <label>موظف قائم</label>
-            <select id="guidedExistingStaff">
-              <option value="">— اختياري —</option>
-            </select>
+          <div id="guidedStaffAssignments"></div>
+
+          <div class="card" style="margin-top:16px;background:#f8fafc">
+            <h4 style="margin-top:0">+ إضافة موظف قائم</h4>
+            <div class="field">
+              <label>اختر الموظف</label>
+              <select id="guidedExistingStaff">
+                <option value="">اختر موظفاً</option>
+              </select>
+            </div>
+            <button class="btn" onclick="guidedAddExistingStaff()">إضافة الموظف</button>
           </div>
 
-          <details>
-            <summary style="cursor:pointer;font-weight:800">أو إضافة مستخدم جديد</summary>
-            <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-top:12px">
-              <div class="field"><label>اسم الموظف</label><input id="guidedStaffName"></div>
-              <div class="field"><label>اسم المستخدم</label><input id="guidedStaffUsername" dir="ltr"></div>
-              <div class="field"><label>البريد الإلكتروني</label><input id="guidedStaffEmail" type="email" dir="ltr"></div>
-              <div class="field"><label>كلمة المرور</label><input id="guidedStaffPassword" type="password" placeholder="8 أحرف على الأقل"></div>
+          <div class="card" style="margin-top:16px;background:#f8fafc">
+            <h4 style="margin-top:0">+ إنشاء مستخدم جديد</h4>
+            <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+              <div class="field">
+                <label>اسم الموظف</label>
+                <input id="guidedStaffName">
+              </div>
+              <div class="field">
+                <label>البريد الإلكتروني</label>
+                <input id="guidedStaffEmail" type="email" dir="ltr" placeholder="name@ku.edu.kw">
+              </div>
+              <div class="field">
+                <label>الصلاحية</label>
+                <select id="guidedStaffRole">
+                  <option value="staff">موظف</option>
+                  <option value="superuser">مدير نظام</option>
+                </select>
+              </div>
             </div>
-          </details>
+            <div class="muted" style="margin:8px 0 12px">
+              سيتم إنشاء كلمة مرور مؤقتة تلقائياً، وسيُطلب من المستخدم اختيار كلمة مرور جديدة عند أول تسجيل دخول.
+            </div>
+            <button class="btn" onclick="guidedAddNewStaffDraft()">إضافة المستخدم</button>
+          </div>
 
-          <h4 style="margin:18px 0 10px">الخدمات التي سيعمل عليها الموظف</h4>
-          <div id="guidedServicePermissions" class="checklist"></div>
+          <div id="guidedTemporaryCredentials" class="hidden" style="margin-top:16px"></div>
 
           <div class="actions">
             <button class="btn" onclick="guidedGoToStep(3)">السابق</button>
-            <button class="btn primary" onclick="guidedSaveStaffPermissions()">حفظ الصلاحيات والمتابعة</button>
+            <button class="btn primary" onclick="guidedSaveAllStaffAssignments()">حفظ الموظفين والصلاحيات والمتابعة</button>
             <button class="btn" onclick="guidedGoToStep(5)">تخطي هذه الخطوة</button>
           </div>
         </div>
@@ -1454,7 +1480,9 @@ let guidedSetup={
   requiresCounter:true,
   counterCount:1,
   departments:[],
-  displayId:null
+  displayId:null,
+  staffAssignments:[],
+  createdCredentials:[]
 };
 
 function showLoginOnly(){
@@ -1521,7 +1549,8 @@ async function startGuidedAdmin(){
 function guidedStartAnother(refresh=true){
   guidedSetup={
     step:1,locationId:null,locationName:"",locationSlug:"",
-    requiresCounter:true,counterCount:1,departments:[],displayId:null
+    requiresCounter:true,counterCount:1,departments:[],displayId:null,
+    staffAssignments:[],createdCredentials:[]
   };
   document.getElementById("guidedExistingLocation").value="";
   document.getElementById("guidedLocationName").value="";
@@ -1752,43 +1781,187 @@ async function guidedSaveLocationSetup(){
   }
 }
 
+function guidedAvailableServices(){
+  const selectedDepartments=new Set(guidedSetup.departments||[]);
+  return (serviceCatalog||[]).filter(
+    s=>s.active && selectedDepartments.has(s.department)
+  );
+}
+
 async function guidedPrepareStaffStep(){
   await loadAdminUsers();
   await loadServiceCatalog();
 
+  const alreadyAdded=new Set(
+    (guidedSetup.staffAssignments||[])
+      .filter(a=>a.kind==="existing")
+      .map(a=>a.userId)
+  );
+
   const staffSelect=document.getElementById("guidedExistingStaff");
-  staffSelect.innerHTML=`<option value="">— اختياري —</option>`+
+  staffSelect.innerHTML=`<option value="">اختر موظفاً</option>`+
     (adminUsers||[])
-      .filter(u=>u.active && u.role==="staff")
-      .map(u=>`<option value="${u.id}">${u.full_name || u.username}</option>`).join("");
+      .filter(u=>u.active && !alreadyAdded.has(u.id))
+      .map(u=>`<option value="${u.id}">${u.full_name || u.username || u.id}</option>`)
+      .join("");
 
-  const selectedDepartments=new Set(guidedSetup.departments||[]);
-  const services=(serviceCatalog||[]).filter(s=>s.active && selectedDepartments.has(s.department));
-
-  document.getElementById("guidedServicePermissions").innerHTML=services.map(s=>`
-    <label class="check">
-      <input class="guided-service-perm" type="checkbox" data-id="${s.id}" checked>
-      <span>${departmentLabel(s.department)} — ${s.service_name}</span>
-    </label>`).join("") || `<div class="muted">لا توجد خدمات نشطة ضمن الإدارات المختارة.</div>`;
+  guidedRenderStaffAssignments();
 }
 
-async function guidedCreateUserIfNeeded(){
-  const existingId=document.getElementById("guidedExistingStaff").value;
-  if(existingId) return existingId;
+function guidedAllServiceIds(){
+  return guidedAvailableServices().map(s=>Number(s.id));
+}
 
-  const full_name=document.getElementById("guidedStaffName").value.trim();
-  const username=document.getElementById("guidedStaffUsername").value.trim();
-  const email=document.getElementById("guidedStaffEmail").value.trim();
-  const password=document.getElementById("guidedStaffPassword").value;
+function guidedAddExistingStaff(){
+  const userId=document.getElementById("guidedExistingStaff").value;
+  if(!userId){
+    guidedSetMessage("يرجى اختيار موظف.",true);
+    return;
+  }
 
-  if(!full_name && !username && !email && !password) return null;
-  if(!full_name || !username || !email || !password) throw new Error("يرجى استكمال بيانات المستخدم الجديد.");
-  if(password.length<8) throw new Error("يجب ألا تقل كلمة المرور عن 8 أحرف.");
+  if((guidedSetup.staffAssignments||[]).some(a=>a.kind==="existing" && a.userId===userId)){
+    guidedSetMessage("تمت إضافة هذا الموظف مسبقاً.",true);
+    return;
+  }
 
+  const u=(adminUsers||[]).find(x=>x.id===userId);
+  if(!u) return;
+
+  guidedSetup.staffAssignments.push({
+    key:`existing-${userId}`,
+    kind:"existing",
+    userId,
+    fullName:u.full_name || u.username || "موظف",
+    email:u.username || "",
+    role:u.role || "staff",
+    serviceIds:guidedAllServiceIds()
+  });
+
+  guidedPrepareStaffStep();
+}
+
+function guidedGenerateTemporaryPassword(){
+  const chars="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const random=new Uint32Array(10);
+  crypto.getRandomValues(random);
+  let core="";
+  for(let i=0;i<random.length;i++) core+=chars[random[i]%chars.length];
+  return `Ku@${core}`;
+}
+
+function guidedAddNewStaffDraft(){
+  const fullName=document.getElementById("guidedStaffName").value.trim();
+  const email=document.getElementById("guidedStaffEmail").value.trim().toLowerCase();
+  const role=document.getElementById("guidedStaffRole").value;
+
+  if(!fullName || !email){
+    guidedSetMessage("يرجى إدخال اسم الموظف والبريد الإلكتروني.",true);
+    return;
+  }
+
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+    guidedSetMessage("يرجى إدخال بريد إلكتروني صحيح.",true);
+    return;
+  }
+
+  if((guidedSetup.staffAssignments||[]).some(a=>a.email?.toLowerCase()===email)){
+    guidedSetMessage("تمت إضافة هذا البريد الإلكتروني مسبقاً.",true);
+    return;
+  }
+
+  const temporaryPassword=guidedGenerateTemporaryPassword();
+  guidedSetup.staffAssignments.push({
+    key:`new-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+    kind:"new",
+    userId:null,
+    fullName,
+    email,
+    role,
+    temporaryPassword,
+    serviceIds:guidedAllServiceIds()
+  });
+
+  document.getElementById("guidedStaffName").value="";
+  document.getElementById("guidedStaffEmail").value="";
+  document.getElementById("guidedStaffRole").value="staff";
+  guidedSetMessage("");
+  guidedPrepareStaffStep();
+}
+
+function guidedRemoveStaffAssignment(key){
+  guidedSetup.staffAssignments=(guidedSetup.staffAssignments||[])
+    .filter(a=>a.key!==key);
+  guidedPrepareStaffStep();
+}
+
+function guidedToggleAssignmentService(key,serviceId,checked){
+  const assignment=(guidedSetup.staffAssignments||[]).find(a=>a.key===key);
+  if(!assignment) return;
+
+  const ids=new Set((assignment.serviceIds||[]).map(Number));
+  if(checked) ids.add(Number(serviceId));
+  else ids.delete(Number(serviceId));
+  assignment.serviceIds=[...ids];
+}
+
+function guidedRenderStaffAssignments(){
+  const box=document.getElementById("guidedStaffAssignments");
+  if(!box) return;
+
+  const assignments=guidedSetup.staffAssignments||[];
+  const services=guidedAvailableServices();
+
+  if(!assignments.length){
+    box.innerHTML=`<div class="notice">لم تتم إضافة موظفين لهذا الموقع بعد.</div>`;
+    return;
+  }
+
+  box.innerHTML=assignments.map(a=>`
+    <div class="card" style="margin-bottom:14px;border:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
+        <div>
+          <b style="font-size:18px">${a.fullName}</b>
+          <div class="muted" dir="ltr">${a.email || ""}</div>
+          <span class="tag" style="margin-top:6px">${a.role==="superuser"?"مدير نظام":"موظف"}</span>
+          ${a.kind==="new"?`<span class="tag" style="margin-top:6px">مستخدم جديد</span>`:""}
+        </div>
+        <button class="btn" onclick="guidedRemoveStaffAssignment('${a.key}')">إزالة من الموقع</button>
+      </div>
+
+      ${a.role==="superuser" ? `
+        <div class="notice" style="margin-top:12px">
+          مدير النظام لا يحتاج إلى صلاحيات موظف محددة لاختبار قوائم الموقع.
+        </div>
+      ` : `
+        <h4 style="margin:16px 0 8px">الصلاحيات في هذا الموقع</h4>
+        <div class="checklist">
+          ${services.map(s=>`
+            <label class="check">
+              <input type="checkbox"
+                     ${(a.serviceIds||[]).map(Number).includes(Number(s.id))?"checked":""}
+                     onchange="guidedToggleAssignmentService('${a.key}',${Number(s.id)},this.checked)">
+              <span>${departmentLabel(s.department)} — ${s.service_name}</span>
+            </label>
+          `).join("") || `<div class="muted">لا توجد خدمات نشطة.</div>`}
+        </div>
+      `}
+    </div>
+  `).join("");
+}
+
+async function guidedCreateAccountForAssignment(a){
+  const username=a.email; // legacy profiles field; email is the actual login identity.
   const primaryDept=guidedSetup.departments[0] || null;
 
   const {data,error}=await supabaseClient.functions.invoke("create-staff-user",{
-    body:{email,password,username,full_name,role:"staff",department:primaryDept}
+    body:{
+      email:a.email,
+      password:a.temporaryPassword,
+      username,
+      full_name:a.fullName,
+      role:a.role,
+      department:a.role==="superuser" ? null : primaryDept
+    }
   });
 
   if(error) throw new Error(error.message || "تعذر إنشاء المستخدم.");
@@ -1800,7 +1973,24 @@ async function guidedCreateUserIfNeeded(){
     .eq("username",username)
     .single();
 
-  if(profileError || !profile) throw new Error("تم إنشاء الحساب لكن تعذر العثور على ملف المستخدم.");
+  if(profileError || !profile){
+    throw new Error(`تم إنشاء حساب ${a.fullName} لكن تعذر العثور على ملف المستخدم.`);
+  }
+
+  const {error:flagError}=await supabaseClient
+    .from("profiles")
+    .update({must_change_password:true})
+    .eq("id",profile.id);
+
+  if(flagError) throw flagError;
+
+  guidedSetup.createdCredentials.push({
+    fullName:a.fullName,
+    email:a.email,
+    temporaryPassword:a.temporaryPassword
+  });
+
+  a.userId=profile.id;
   return profile.id;
 }
 
@@ -1818,14 +2008,12 @@ function guidedPermissionRowsForService(userId,service){
     return rows;
   }
 
-  // Records college routes: grant all configured records colleges.
   if(!service.requires_letter){
     const colleges=departments?.records?.colleges || [];
     colleges.forEach(c=>rows.push({...base,college:c,letter_range:null}));
     return rows;
   }
 
-  // Graduate activity/graduation: grant all configured college-letter ranges.
   (gradColleges||[]).forEach(c=>{
     (gradRanges[c]||[["أ","ي"]]).forEach(r=>{
       rows.push({...base,college:c,letter_range:`${r[0]}–${r[1]}`});
@@ -1834,40 +2022,87 @@ function guidedPermissionRowsForService(userId,service){
   return rows;
 }
 
-async function guidedSaveStaffPermissions(){
+async function guidedSavePermissionsForAssignment(a){
+  if(a.role==="superuser") return;
+
+  const selectedIds=(a.serviceIds||[]).map(Number);
+  if(!selectedIds.length){
+    throw new Error(`يرجى تحديد صلاحية واحدة على الأقل للموظف ${a.fullName}.`);
+  }
+
+  const services=guidedAvailableServices().filter(
+    s=>selectedIds.includes(Number(s.id))
+  );
+  const rows=services.flatMap(s=>guidedPermissionRowsForService(a.userId,s));
+
+  const {error:deleteError}=await supabaseClient
+    .from("staff_permissions")
+    .delete()
+    .eq("user_id",a.userId)
+    .in("department",guidedSetup.departments);
+
+  if(deleteError) throw deleteError;
+
+  if(rows.length){
+    const {error:insertError}=await supabaseClient
+      .from("staff_permissions")
+      .insert(rows);
+    if(insertError) throw insertError;
+  }
+}
+
+function guidedRenderTemporaryCredentials(){
+  const wrap=document.getElementById("guidedTemporaryCredentials");
+  const creds=guidedSetup.createdCredentials||[];
+
+  if(!creds.length){
+    wrap.classList.add("hidden");
+    wrap.innerHTML="";
+    return;
+  }
+
+  wrap.classList.remove("hidden");
+  wrap.innerHTML=`
+    <div class="notice">
+      <b>كلمات المرور المؤقتة — تظهر هنا مرة واحدة</b>
+      <div class="muted">سلّم كل مستخدم بياناته بشكل آمن. سيُطلب منه اختيار كلمة مرور جديدة عند أول تسجيل دخول.</div>
+    </div>
+    ${creds.map(c=>`
+      <div class="card" style="margin-top:8px">
+        <b>${c.fullName}</b>
+        <div dir="ltr">${c.email}</div>
+        <div style="margin-top:8px">كلمة المرور المؤقتة:
+          <code dir="ltr" style="font-size:17px">${c.temporaryPassword}</code>
+        </div>
+      </div>
+    `).join("")}
+  `;
+}
+
+async function guidedSaveAllStaffAssignments(){
   try{
-    const userId=await guidedCreateUserIfNeeded();
-    if(!userId){
+    const assignments=guidedSetup.staffAssignments||[];
+
+    if(!assignments.length){
       guidedGoToStep(5);
       return;
     }
 
-    const selectedIds=[...document.querySelectorAll(".guided-service-perm:checked")]
-      .map(x=>Number(x.dataset.id))
-      .filter(Boolean);
+    guidedSetup.createdCredentials=[];
 
-    if(!selectedIds.length) throw new Error("يرجى اختيار خدمة واحدة على الأقل.");
-
-    const services=(serviceCatalog||[]).filter(s=>selectedIds.includes(Number(s.id)));
-    const rows=services.flatMap(s=>guidedPermissionRowsForService(userId,s));
-
-    // Replace permissions only for departments in this location; preserve unrelated permissions.
-    const {error:deleteError}=await supabaseClient
-      .from("staff_permissions")
-      .delete()
-      .eq("user_id",userId)
-      .in("department",guidedSetup.departments);
-    if(deleteError) throw deleteError;
-
-    if(rows.length){
-      const {error:insertError}=await supabaseClient.from("staff_permissions").insert(rows);
-      if(insertError) throw insertError;
+    for(const a of assignments){
+      if(a.kind==="new" && !a.userId){
+        await guidedCreateAccountForAssignment(a);
+      }
+      await guidedSavePermissionsForAssignment(a);
     }
 
-    guidedGoToStep(5);
+    guidedRenderTemporaryCredentials();
+    guidedSetMessage("تم حفظ الموظفين والصلاحيات.");
+    setTimeout(()=>guidedGoToStep(5),1200);
   }catch(err){
     console.error(err);
-    guidedSetMessage(`تعذر حفظ الموظف أو الصلاحيات: ${err.message}`,true);
+    guidedSetMessage(`تعذر حفظ الموظفين أو الصلاحيات: ${err.message}`,true);
   }
 }
 
@@ -1888,9 +2123,25 @@ function guidedScreenUrl(){
 }
 
 function guidedRenderFinish(){
+  const creds=guidedSetup.createdCredentials||[];
+
   document.getElementById("guidedFinishSummary").innerHTML=
     `تم إعداد <b>${guidedSetup.locationName}</b> بنجاح`+
-    (guidedSetup.requiresCounter ? ` — عدد الكاونترات: <b>${guidedSetup.counterCount}</b>` : " — بدون كاونترات فعلية");
+    (guidedSetup.requiresCounter ? ` — عدد الكاونترات: <b>${guidedSetup.counterCount}</b>` : " — بدون كاونترات فعلية")+
+    (creds.length ? `
+      <div style="margin-top:12px">
+        <b>بيانات الدخول المؤقتة للمستخدمين الجدد:</b>
+        ${creds.map(c=>`
+          <div class="card" style="margin-top:8px;background:#fff">
+            <b>${c.fullName}</b>
+            <div dir="ltr">${c.email}</div>
+            <div>كلمة المرور المؤقتة: <code dir="ltr">${c.temporaryPassword}</code></div>
+          </div>
+        `).join("")}
+        <div class="muted" style="margin-top:8px">
+          تُعرض كلمات المرور المؤقتة في هذه الجلسة فقط. سيُطلب من المستخدم تغييرها عند أول دخول.
+        </div>
+      </div>` : "");
 
   document.getElementById("guidedVisitorLink").textContent=guidedVisitorUrl();
   document.getElementById("guidedScreenLink").textContent=guidedScreenUrl();
@@ -1922,6 +2173,49 @@ async function openAdvancedAdmin(){
   showView("admin");
 }
 
+let requiredPasswordChangeUserId=null;
+
+async function forgotPassword(){
+  const email=document.getElementById("staffEmail").value.trim().toLowerCase();
+  const msg=document.getElementById("forgotPasswordMessage");
+
+  if(!email){
+    msg.textContent="يرجى إدخال البريد الإلكتروني أولاً.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  const redirectTo=`${window.location.origin}${window.location.pathname}`;
+  const {error}=await supabaseClient.auth.resetPasswordForEmail(email,{redirectTo});
+
+  if(error){
+    console.error("Password reset email failed:",error);
+    msg.textContent="تعذر إرسال رابط إعادة تعيين كلمة المرور. يرجى التحقق من البريد الإلكتروني.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  msg.textContent="تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.";
+  msg.classList.remove("hidden");
+}
+
+function showRequiredPasswordChange(userId){
+  requiredPasswordChangeUserId=userId;
+  document.querySelector(".nav")?.classList.add("hidden");
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  document.getElementById("passwordReset").classList.add("active");
+
+  document.getElementById("passwordResetTitle").textContent="إنشاء كلمة مرور جديدة";
+  document.getElementById("passwordResetSubtitle").textContent=
+    "لأسباب أمنية، يجب تغيير كلمة المرور المؤقتة قبل متابعة استخدام النظام.";
+
+  document.getElementById("newPassword").value="";
+  document.getElementById("confirmNewPassword").value="";
+  const msg=document.getElementById("passwordResetMessage");
+  msg.textContent="";
+  msg.classList.add("hidden");
+}
+
 async function staffLogin(){
   const email=document.getElementById("staffEmail").value.trim();
   const password=document.getElementById("staffPassword").value;
@@ -1944,7 +2238,7 @@ async function staffLogin(){
 
   const { data:profile, error:profileError } = await supabaseClient
     .from("profiles")
-    .select("id,username,full_name,role,department,active")
+    .select("id,username,full_name,role,department,active,must_change_password")
     .eq("id",authData.user.id)
     .single();
 
@@ -1958,6 +2252,19 @@ async function staffLogin(){
   if(!profile.active){
     await supabaseClient.auth.signOut();
     alert("هذا الحساب موقوف. يرجى مراجعة مدير النظام.");
+    return;
+  }
+
+  if(profile.must_change_password){
+    staff={
+      userId:profile.id,
+      username:profile.username,
+      name:profile.full_name,
+      role:profile.role,
+      department:profile.department
+    };
+    document.getElementById("staffLogin").classList.add("hidden");
+    showRequiredPasswordChange(profile.id);
     return;
   }
 
@@ -4827,7 +5134,22 @@ async function saveNewPassword(){
     return;
   }
 
-  msg.textContent="تم تحديث كلمة المرور بنجاح. سيتم تحويلك إلى النظام.";
+  if(requiredPasswordChangeUserId){
+    const {error:flagError}=await supabaseClient
+      .from("profiles")
+      .update({must_change_password:false})
+      .eq("id",requiredPasswordChangeUserId);
+
+    if(flagError){
+      console.error("Could not clear first-login password flag:",flagError);
+      msg.textContent="تم تغيير كلمة المرور، لكن تعذر تحديث حالة الحساب. يرجى مراجعة مدير النظام.";
+      msg.classList.remove("hidden");
+      return;
+    }
+    requiredPasswordChangeUserId=null;
+  }
+
+  msg.textContent="تم تحديث كلمة المرور بنجاح. يمكنك تسجيل الدخول بكلمة المرور الجديدة.";
   msg.classList.remove("hidden");
 
   setTimeout(async ()=>{
@@ -4846,6 +5168,10 @@ function isRecoveryLink(){
 
 async function handleRecoveryMode(){
   if(!isRecoveryLink()) return false;
+
+  requiredPasswordChangeUserId=null;
+  document.getElementById("passwordResetTitle").textContent="إعادة تعيين كلمة المرور";
+  document.getElementById("passwordResetSubtitle").textContent="يرجى إدخال كلمة المرور الجديدة";
 
   // Hide normal top navigation during password reset.
   document.querySelectorAll(".nav button").forEach(b=>b.classList.remove("active"));
