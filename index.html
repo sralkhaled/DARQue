@@ -109,6 +109,29 @@
   .visitor-live-side{min-width:0}
   .visitor-live-side h2{text-align:center;margin-top:0;font-size:30px}
   @media(max-width:760px){.visitor-waiting-grid{grid-template-columns:1fr}.visitor-own-card{min-height:auto;padding:20px}.visitor-own-card .num{font-size:54px}}
+
+  .guided-shell{max-width:980px;margin:0 auto}
+  .guided-progress{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+  .guided-progress span{
+    flex:1;min-width:120px;padding:9px 10px;border-radius:999px;
+    background:#eef2f7;color:#64748b;text-align:center;font-size:13px;font-weight:800
+  }
+  .guided-progress span.active{background:var(--primary);color:#fff}
+  .guided-progress span.done{background:#dcfce7;color:#166534}
+  .guided-step{display:none}
+  .guided-step.active{display:block}
+  .guided-choice{
+    border:1px solid var(--border);border-radius:14px;padding:14px;
+    display:flex;gap:10px;align-items:center;margin-bottom:10px;background:#fff
+  }
+  .guided-choice input{width:auto}
+  .guided-links{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .guided-link-card{border:1px solid var(--border);border-radius:16px;padding:18px;background:#fff}
+  .guided-link-card code{display:block;direction:ltr;word-break:break-all;margin:10px 0}
+  @media(max-width:760px){
+    .guided-links{grid-template-columns:1fr}
+    .guided-progress span{min-width:45%}
+  }
   .notice{background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;padding:12px 14px;border-radius:12px;margin-bottom:14px}
   .muted{color:var(--muted)} .hidden{display:none!important}
 </style>
@@ -244,6 +267,161 @@
 
           <h4 style="margin:22px 0 10px">الأدوار المنتظرة لهذا الكاونتر</h4>
           <div id="staffQueue" class="queue-list"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- GUIDED SUPERUSER SETUP -->
+  <section id="guidedAdmin" class="view">
+    <div class="guided-shell">
+      <div class="hero">
+        <h2>إعداد موقع الخدمة</h2>
+        <p>إعداد الموقع والكاونترات والخدمات والمستخدمين خطوة بخطوة</p>
+      </div>
+
+      <div class="guided-progress" id="guidedProgress">
+        <span data-step="1">١. الموقع</span>
+        <span data-step="2">٢. الكاونترات</span>
+        <span data-step="3">٣. الإدارات والخدمات</span>
+        <span data-step="4">٤. الموظفون والصلاحيات</span>
+        <span data-step="5">٥. الروابط والتشغيل</span>
+      </div>
+
+      <div class="card">
+        <div id="guidedMessage" class="notice hidden"></div>
+
+        <div class="guided-step" data-step="1">
+          <h3 class="section-title">أين سيتم تقديم الخدمة؟</h3>
+          <div class="field">
+            <label>اختر موقعاً قائماً</label>
+            <select id="guidedExistingLocation" onchange="guidedExistingLocationChanged()">
+              <option value="">إضافة موقع جديد</option>
+            </select>
+          </div>
+          <div class="grid" style="grid-template-columns:2fr 1fr;gap:12px">
+            <div class="field">
+              <label>اسم الموقع / الصالة</label>
+              <input id="guidedLocationName" placeholder="مثال: صالة ٤ أو مكتب خاص">
+            </div>
+            <div class="field">
+              <label>رمز الرابط</label>
+              <input id="guidedLocationSlug" dir="ltr" placeholder="hall4">
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn primary" onclick="guidedNextFromLocation()">التالي</button>
+            <button class="btn" onclick="openAdvancedAdmin()">إدارة متقدمة</button>
+            <button class="btn" onclick="staffLogout()">تسجيل الخروج</button>
+          </div>
+        </div>
+
+        <div class="guided-step" data-step="2">
+          <h3 class="section-title">هل يحتوي الموقع على كاونترات؟</h3>
+          <div class="guided-choice">
+            <input type="radio" name="guidedHasCounters" id="guidedCountersYes" value="yes" checked onchange="guidedCounterModeChanged()">
+            <label for="guidedCountersYes"><b>نعم</b> — يتم نداء المراجع إلى رقم كاونتر محدد</label>
+          </div>
+          <div class="guided-choice">
+            <input type="radio" name="guidedHasCounters" id="guidedCountersNo" value="no" onchange="guidedCounterModeChanged()">
+            <label for="guidedCountersNo"><b>لا</b> — يتم نداء المراجع إلى الموقع مباشرة دون رقم كاونتر</label>
+          </div>
+          <div class="field" id="guidedCounterCountWrap">
+            <label>عدد الكاونترات</label>
+            <input id="guidedCounterCount" type="number" min="1" max="100" value="1">
+            <div class="muted">سيتم إنشاء كاونتر 1 حتى العدد المحدد تلقائياً.</div>
+          </div>
+          <div class="actions">
+            <button class="btn" onclick="guidedGoToStep(1)">السابق</button>
+            <button class="btn primary" onclick="guidedNextFromCounters()">التالي</button>
+          </div>
+        </div>
+
+        <div class="guided-step" data-step="3">
+          <h3 class="section-title">الإدارات والخدمات الموجودة في الموقع</h3>
+          <div class="muted" style="margin-bottom:12px">
+            اختر إدارة واحدة أو أكثر. جميع خدمات الإدارة المختارة ستكون متاحة في هذا الموقع.
+          </div>
+          <div id="guidedDepartmentChecklist" class="checklist" style="display:flex;flex-wrap:wrap;gap:10px"></div>
+
+          <details style="margin-top:18px">
+            <summary style="cursor:pointer;font-weight:800">إضافة إدارة / خدمة مخصصة</summary>
+            <div class="grid" style="grid-template-columns:2fr 1fr;gap:12px;margin-top:12px">
+              <div class="field">
+                <label>اسم الإدارة الجديدة</label>
+                <input id="guidedCustomDeptName" placeholder="مثال: مكتب خاص">
+              </div>
+              <div class="field">
+                <label>بادئة رقم الانتظار</label>
+                <input id="guidedCustomDeptPrefix" maxlength="3" placeholder="مثال: م">
+              </div>
+            </div>
+            <div class="field">
+              <label>اسم الخدمة الأولى</label>
+              <input id="guidedCustomServiceName" placeholder="مثال: استفسارات خاصة">
+            </div>
+            <button class="btn" onclick="guidedAddCustomDepartment()">إضافة الإدارة والخدمة</button>
+          </details>
+
+          <div class="actions">
+            <button class="btn" onclick="guidedGoToStep(2)">السابق</button>
+            <button class="btn primary" onclick="guidedSaveLocationSetup()">حفظ الموقع والمتابعة</button>
+          </div>
+        </div>
+
+        <div class="guided-step" data-step="4">
+          <h3 class="section-title">الموظفون والصلاحيات</h3>
+          <p class="muted">يمكنك ربط موظف قائم أو إنشاء مستخدم جديد ومنحه خدمات هذا الموقع.</p>
+
+          <div class="field">
+            <label>موظف قائم</label>
+            <select id="guidedExistingStaff">
+              <option value="">— اختياري —</option>
+            </select>
+          </div>
+
+          <details>
+            <summary style="cursor:pointer;font-weight:800">أو إضافة مستخدم جديد</summary>
+            <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-top:12px">
+              <div class="field"><label>اسم الموظف</label><input id="guidedStaffName"></div>
+              <div class="field"><label>اسم المستخدم</label><input id="guidedStaffUsername" dir="ltr"></div>
+              <div class="field"><label>البريد الإلكتروني</label><input id="guidedStaffEmail" type="email" dir="ltr"></div>
+              <div class="field"><label>كلمة المرور</label><input id="guidedStaffPassword" type="password" placeholder="8 أحرف على الأقل"></div>
+            </div>
+          </details>
+
+          <h4 style="margin:18px 0 10px">الخدمات التي سيعمل عليها الموظف</h4>
+          <div id="guidedServicePermissions" class="checklist"></div>
+
+          <div class="actions">
+            <button class="btn" onclick="guidedGoToStep(3)">السابق</button>
+            <button class="btn primary" onclick="guidedSaveStaffPermissions()">حفظ الصلاحيات والمتابعة</button>
+            <button class="btn" onclick="guidedGoToStep(5)">تخطي هذه الخطوة</button>
+          </div>
+        </div>
+
+        <div class="guided-step" data-step="5">
+          <h3 class="section-title">تم إعداد الموقع</h3>
+          <div id="guidedFinishSummary" class="notice"></div>
+          <div class="guided-links">
+            <div class="guided-link-card">
+              <b>رابط المراجع / QR</b>
+              <code id="guidedVisitorLink"></code>
+              <button class="btn primary" onclick="guidedCopyLink('visitor')">نسخ رابط المراجع / QR</button>
+            </div>
+            <div class="guided-link-card">
+              <b>رابط شاشة النداء</b>
+              <code id="guidedScreenLink"></code>
+              <button class="btn primary" onclick="guidedCopyLink('screen')">نسخ رابط شاشة النداء</button>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn primary" onclick="guidedStartAnother()">إعداد موقع آخر</button>
+            <button class="btn" onclick="guidedOperateCounter()">الانتقال إلى الكاونتر</button>
+            <button class="btn" onclick="openAdvancedAdmin()">إدارة متقدمة</button>
+            <button class="btn" onclick="staffLogout()">تسجيل الخروج</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1267,6 +1445,483 @@ async function refreshStaffPermissions(){
   }
 }
 
+
+let guidedSetup={
+  step:1,
+  locationId:null,
+  locationName:"",
+  locationSlug:"",
+  requiresCounter:true,
+  counterCount:1,
+  departments:[],
+  displayId:null
+};
+
+function showLoginOnly(){
+  restoreGeneralChrome();
+  document.querySelector(".nav")?.classList.add("hidden");
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  document.getElementById("staff").classList.add("active");
+  document.getElementById("staffLogin").classList.remove("hidden");
+  document.getElementById("staffPanel").classList.add("hidden");
+}
+
+function guidedSetMessage(message,isError=false){
+  const box=document.getElementById("guidedMessage");
+  if(!box) return;
+  if(!message){
+    box.textContent="";
+    box.classList.add("hidden");
+    return;
+  }
+  box.textContent=message;
+  box.classList.remove("hidden");
+  box.style.background=isError ? "#fff1f2" : "";
+  box.style.color=isError ? "#b42318" : "";
+  box.style.borderColor=isError ? "#fecdd3" : "";
+}
+
+function guidedGoToStep(step){
+  guidedSetup.step=step;
+  document.querySelectorAll("#guidedAdmin .guided-step").forEach(el=>{
+    el.classList.toggle("active",Number(el.dataset.step)===step);
+  });
+  document.querySelectorAll("#guidedProgress span").forEach(el=>{
+    const n=Number(el.dataset.step);
+    el.classList.toggle("active",n===step);
+    el.classList.toggle("done",n<step);
+  });
+  guidedSetMessage("");
+
+  if(step===3) guidedRenderDepartments();
+  if(step===4) guidedPrepareStaffStep();
+  if(step===5) guidedRenderFinish();
+}
+
+async function startGuidedAdmin(){
+  document.querySelector(".nav")?.classList.add("hidden");
+  document.getElementById("staffLogin").classList.add("hidden");
+  document.getElementById("staffPanel").classList.add("hidden");
+
+  await loadDepartmentCatalog();
+  await loadServiceCatalog();
+  await loadHallsAndDisplays();
+  await loadServiceLocations();
+
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  document.getElementById("guidedAdmin").classList.add("active");
+
+  const select=document.getElementById("guidedExistingLocation");
+  select.innerHTML=`<option value="">إضافة موقع جديد</option>`+
+    (serviceLocations||[]).map(l=>`<option value="${l.id}">${l.name}</option>`).join("");
+
+  guidedStartAnother(false);
+}
+
+function guidedStartAnother(refresh=true){
+  guidedSetup={
+    step:1,locationId:null,locationName:"",locationSlug:"",
+    requiresCounter:true,counterCount:1,departments:[],displayId:null
+  };
+  document.getElementById("guidedExistingLocation").value="";
+  document.getElementById("guidedLocationName").value="";
+  document.getElementById("guidedLocationSlug").value="";
+  document.getElementById("guidedCountersYes").checked=true;
+  document.getElementById("guidedCounterCount").value="1";
+  guidedCounterModeChanged();
+  guidedGoToStep(1);
+
+  if(refresh){
+    loadServiceLocations().then(()=>{
+      const s=document.getElementById("guidedExistingLocation");
+      s.innerHTML=`<option value="">إضافة موقع جديد</option>`+
+        (serviceLocations||[]).map(l=>`<option value="${l.id}">${l.name}</option>`).join("");
+    });
+  }
+}
+
+function guidedExistingLocationChanged(){
+  const id=Number(document.getElementById("guidedExistingLocation").value||0);
+  const l=(serviceLocations||[]).find(x=>Number(x.id)===id) || null;
+
+  if(!l){
+    guidedSetup.locationId=null;
+    document.getElementById("guidedLocationName").value="";
+    document.getElementById("guidedLocationSlug").value="";
+    return;
+  }
+
+  guidedSetup.locationId=l.id;
+  guidedSetup.displayId=l.display_id;
+  document.getElementById("guidedLocationName").value=l.name || "";
+  document.getElementById("guidedLocationSlug").value=l.slug || "";
+
+  const cfg=locationDisplayConfig(l);
+  const hasCounters=displayRequiresCounter(cfg);
+  document.getElementById(hasCounters?"guidedCountersYes":"guidedCountersNo").checked=true;
+  guidedCounterModeChanged();
+
+  guidedSetup.departments=(l.service_location_departments||[]).map(x=>x.department);
+}
+
+function guidedNextFromLocation(){
+  const name=document.getElementById("guidedLocationName").value.trim();
+  let slug=normalizeSlug(document.getElementById("guidedLocationSlug").value);
+
+  if(!name){
+    guidedSetMessage("يرجى إدخال اسم الموقع.",true);
+    return;
+  }
+  if(!slug){
+    slug="loc-"+Date.now().toString(36);
+    document.getElementById("guidedLocationSlug").value=slug;
+  }
+
+  guidedSetup.locationName=name;
+  guidedSetup.locationSlug=slug;
+  guidedGoToStep(2);
+}
+
+function guidedCounterModeChanged(){
+  const yes=document.getElementById("guidedCountersYes").checked;
+  document.getElementById("guidedCounterCountWrap").classList.toggle("hidden",!yes);
+}
+
+function guidedNextFromCounters(){
+  const requiresCounter=document.getElementById("guidedCountersYes").checked;
+  const count=requiresCounter ? Number(document.getElementById("guidedCounterCount").value||0) : 0;
+
+  if(requiresCounter && (!count || count<1 || count>100)){
+    guidedSetMessage("يرجى إدخال عدد صحيح للكاونترات.",true);
+    return;
+  }
+
+  guidedSetup.requiresCounter=requiresCounter;
+  guidedSetup.counterCount=count;
+  guidedGoToStep(3);
+}
+
+function guidedRenderDepartments(){
+  const box=document.getElementById("guidedDepartmentChecklist");
+  const selected=new Set(guidedSetup.departments||[]);
+  box.innerHTML=locationDepartmentChoices().map(d=>`
+    <label class="check" style="min-width:220px">
+      <input class="guided-dept-checkbox" type="checkbox" value="${d.slug}" ${selected.has(d.slug)?"checked":""}>
+      <span>${d.name}</span>
+    </label>`).join("");
+}
+
+async function guidedAddCustomDepartment(){
+  const name=document.getElementById("guidedCustomDeptName").value.trim();
+  const prefix=document.getElementById("guidedCustomDeptPrefix").value.trim();
+  const serviceName=document.getElementById("guidedCustomServiceName").value.trim();
+
+  if(!name || !prefix || !serviceName){
+    guidedSetMessage("يرجى إدخال اسم الإدارة وبادئة الرقم واسم الخدمة.",true);
+    return;
+  }
+
+  const slug=makeDepartmentSlug(name);
+
+  const {error:deptError}=await supabaseClient.from("department_catalog").insert({
+    slug,name,ticket_prefix:prefix,built_in:false,active:true,sort_order:100
+  });
+  if(deptError && deptError.code!=="23505"){
+    guidedSetMessage(`تعذر إضافة الإدارة: ${deptError.message}`,true);
+    return;
+  }
+
+  const {error:svcError}=await supabaseClient.from("service_catalog").insert({
+    department:slug,section:null,service_name:serviceName,
+    requires_college:false,requires_letter:false,ticket_prefix:null,
+    active:true,sort_order:100
+  });
+  if(svcError && svcError.code!=="23505"){
+    guidedSetMessage(`تعذر إضافة الخدمة: ${svcError.message}`,true);
+    return;
+  }
+
+  await loadDepartmentCatalog();
+  await loadServiceCatalog();
+  guidedSetup.departments=[...new Set([...(guidedSetup.departments||[]),slug])];
+  guidedRenderDepartments();
+  document.getElementById("guidedCustomDeptName").value="";
+  document.getElementById("guidedCustomDeptPrefix").value="";
+  document.getElementById("guidedCustomServiceName").value="";
+  guidedSetMessage("تمت إضافة الإدارة والخدمة.");
+}
+
+async function guidedSyncCounters(hallId,count){
+  if(!hallId) return;
+
+  const {data:existing,error}=await supabaseClient
+    .from("counters")
+    .select("id,counter_number,active")
+    .eq("hall_id",hallId);
+
+  if(error) throw error;
+
+  const byNo=new Map((existing||[]).map(c=>[Number(c.counter_number),c]));
+
+  for(let n=1;n<=count;n++){
+    const row=byNo.get(n);
+    if(row){
+      if(!row.active){
+        const {error:e}=await supabaseClient.from("counters").update({active:true}).eq("id",row.id);
+        if(e) throw e;
+      }
+    }else{
+      const {error:e}=await supabaseClient.from("counters").insert({
+        counter_number:n,hall_id:hallId,active:true
+      });
+      if(e) throw e;
+    }
+  }
+
+  // Do not delete old counters. Safely deactivate counters above the new count.
+  for(const row of existing||[]){
+    if(Number(row.counter_number)>count && row.active){
+      const {error:e}=await supabaseClient.from("counters").update({active:false}).eq("id",row.id);
+      if(e) throw e;
+    }
+  }
+}
+
+async function guidedSaveLocationSetup(){
+  const departments=[...document.querySelectorAll(".guided-dept-checkbox:checked")].map(x=>x.value);
+  if(!departments.length){
+    guidedSetMessage("يرجى اختيار إدارة واحدة على الأقل.",true);
+    return;
+  }
+  guidedSetup.departments=departments;
+
+  try{
+    const existing=guidedSetup.locationId
+      ? (serviceLocations||[]).find(l=>Number(l.id)===Number(guidedSetup.locationId))
+      : null;
+
+    const displayId=await ensureLocationDisplay({
+      name:guidedSetup.locationName,
+      slug:guidedSetup.locationSlug,
+      sortOrder:100,
+      requiresCounter:guidedSetup.requiresCounter,
+      existingDisplayId:existing?.display_id || null
+    });
+
+    let locationId=guidedSetup.locationId;
+
+    if(locationId){
+      const {error}=await supabaseClient.from("service_locations").update({
+        name:guidedSetup.locationName,
+        slug:guidedSetup.locationSlug,
+        display_id:displayId,
+        active:true
+      }).eq("id",locationId);
+      if(error) throw error;
+    }else{
+      const {data,error}=await supabaseClient.from("service_locations").insert({
+        name:guidedSetup.locationName,
+        slug:guidedSetup.locationSlug,
+        display_id:displayId,
+        active:true,
+        sort_order:100
+      }).select("id").single();
+      if(error) throw error;
+      locationId=data.id;
+    }
+
+    await syncLocationDepartments(locationId,departments);
+
+    if(guidedSetup.requiresCounter){
+      await loadHallsAndDisplays();
+      const cfg=(displayConfigs||[]).find(d=>Number(d.id)===Number(displayId));
+      if(!cfg?.hall_id) throw new Error("تعذر ربط الموقع بقاعة الكاونترات.");
+      await guidedSyncCounters(cfg.hall_id,guidedSetup.counterCount);
+    }
+
+    guidedSetup.locationId=locationId;
+    guidedSetup.displayId=displayId;
+
+    await loadHallsAndDisplays();
+    await loadServiceLocations();
+    await loadAvailableWorkCounters();
+    guidedGoToStep(4);
+  }catch(err){
+    console.error(err);
+    guidedSetMessage(`تعذر حفظ إعداد الموقع: ${err.message}`,true);
+  }
+}
+
+async function guidedPrepareStaffStep(){
+  await loadAdminUsers();
+  await loadServiceCatalog();
+
+  const staffSelect=document.getElementById("guidedExistingStaff");
+  staffSelect.innerHTML=`<option value="">— اختياري —</option>`+
+    (adminUsers||[])
+      .filter(u=>u.active && u.role==="staff")
+      .map(u=>`<option value="${u.id}">${u.full_name || u.username}</option>`).join("");
+
+  const selectedDepartments=new Set(guidedSetup.departments||[]);
+  const services=(serviceCatalog||[]).filter(s=>s.active && selectedDepartments.has(s.department));
+
+  document.getElementById("guidedServicePermissions").innerHTML=services.map(s=>`
+    <label class="check">
+      <input class="guided-service-perm" type="checkbox" data-id="${s.id}" checked>
+      <span>${departmentLabel(s.department)} — ${s.service_name}</span>
+    </label>`).join("") || `<div class="muted">لا توجد خدمات نشطة ضمن الإدارات المختارة.</div>`;
+}
+
+async function guidedCreateUserIfNeeded(){
+  const existingId=document.getElementById("guidedExistingStaff").value;
+  if(existingId) return existingId;
+
+  const full_name=document.getElementById("guidedStaffName").value.trim();
+  const username=document.getElementById("guidedStaffUsername").value.trim();
+  const email=document.getElementById("guidedStaffEmail").value.trim();
+  const password=document.getElementById("guidedStaffPassword").value;
+
+  if(!full_name && !username && !email && !password) return null;
+  if(!full_name || !username || !email || !password) throw new Error("يرجى استكمال بيانات المستخدم الجديد.");
+  if(password.length<8) throw new Error("يجب ألا تقل كلمة المرور عن 8 أحرف.");
+
+  const primaryDept=guidedSetup.departments[0] || null;
+
+  const {data,error}=await supabaseClient.functions.invoke("create-staff-user",{
+    body:{email,password,username,full_name,role:"staff",department:primaryDept}
+  });
+
+  if(error) throw new Error(error.message || "تعذر إنشاء المستخدم.");
+  if(data?.error) throw new Error(data.error);
+
+  const {data:profile,error:profileError}=await supabaseClient
+    .from("profiles")
+    .select("id,username")
+    .eq("username",username)
+    .single();
+
+  if(profileError || !profile) throw new Error("تم إنشاء الحساب لكن تعذر العثور على ملف المستخدم.");
+  return profile.id;
+}
+
+function guidedPermissionRowsForService(userId,service){
+  const rows=[];
+  const base={
+    user_id:userId,
+    service_id:service.id,
+    department:service.department,
+    section:service.section || null
+  };
+
+  if(!service.requires_college){
+    rows.push({...base,college:null,letter_range:null});
+    return rows;
+  }
+
+  // Records college routes: grant all configured records colleges.
+  if(!service.requires_letter){
+    const colleges=departments?.records?.colleges || [];
+    colleges.forEach(c=>rows.push({...base,college:c,letter_range:null}));
+    return rows;
+  }
+
+  // Graduate activity/graduation: grant all configured college-letter ranges.
+  (gradColleges||[]).forEach(c=>{
+    (gradRanges[c]||[["أ","ي"]]).forEach(r=>{
+      rows.push({...base,college:c,letter_range:`${r[0]}–${r[1]}`});
+    });
+  });
+  return rows;
+}
+
+async function guidedSaveStaffPermissions(){
+  try{
+    const userId=await guidedCreateUserIfNeeded();
+    if(!userId){
+      guidedGoToStep(5);
+      return;
+    }
+
+    const selectedIds=[...document.querySelectorAll(".guided-service-perm:checked")]
+      .map(x=>Number(x.dataset.id))
+      .filter(Boolean);
+
+    if(!selectedIds.length) throw new Error("يرجى اختيار خدمة واحدة على الأقل.");
+
+    const services=(serviceCatalog||[]).filter(s=>selectedIds.includes(Number(s.id)));
+    const rows=services.flatMap(s=>guidedPermissionRowsForService(userId,s));
+
+    // Replace permissions only for departments in this location; preserve unrelated permissions.
+    const {error:deleteError}=await supabaseClient
+      .from("staff_permissions")
+      .delete()
+      .eq("user_id",userId)
+      .in("department",guidedSetup.departments);
+    if(deleteError) throw deleteError;
+
+    if(rows.length){
+      const {error:insertError}=await supabaseClient.from("staff_permissions").insert(rows);
+      if(insertError) throw insertError;
+    }
+
+    guidedGoToStep(5);
+  }catch(err){
+    console.error(err);
+    guidedSetMessage(`تعذر حفظ الموظف أو الصلاحيات: ${err.message}`,true);
+  }
+}
+
+function guidedVisitorUrl(){
+  const u=new URL(window.location.href);
+  u.search="";
+  u.hash="";
+  u.searchParams.set("location",guidedSetup.locationSlug);
+  return u.toString();
+}
+
+function guidedScreenUrl(){
+  const u=new URL(window.location.href);
+  u.search="";
+  u.hash="";
+  u.searchParams.set("display",guidedSetup.locationSlug);
+  return u.toString();
+}
+
+function guidedRenderFinish(){
+  document.getElementById("guidedFinishSummary").innerHTML=
+    `تم إعداد <b>${guidedSetup.locationName}</b> بنجاح`+
+    (guidedSetup.requiresCounter ? ` — عدد الكاونترات: <b>${guidedSetup.counterCount}</b>` : " — بدون كاونترات فعلية");
+
+  document.getElementById("guidedVisitorLink").textContent=guidedVisitorUrl();
+  document.getElementById("guidedScreenLink").textContent=guidedScreenUrl();
+}
+
+async function guidedCopyLink(type){
+  const value=type==="visitor" ? guidedVisitorUrl() : guidedScreenUrl();
+  try{
+    await navigator.clipboard.writeText(value);
+    alert(type==="visitor" ? "تم نسخ رابط المراجع / QR." : "تم نسخ رابط شاشة النداء.");
+  }catch{
+    prompt("انسخ الرابط:",value);
+  }
+}
+
+async function guidedOperateCounter(){
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  document.getElementById("staff").classList.add("active");
+  document.getElementById("staffLogin").classList.add("hidden");
+  document.getElementById("staffPanel").classList.remove("hidden");
+  await loadHallsAndDisplays();
+  await loadServiceLocations();
+  await loadAvailableWorkCounters();
+  populateStaffDisplayDestinations();
+}
+
+async function openAdvancedAdmin(){
+  document.querySelector(".nav")?.classList.remove("hidden");
+  showView("admin");
+}
+
 async function staffLogin(){
   const email=document.getElementById("staffEmail").value.trim();
   const password=document.getElementById("staffPassword").value;
@@ -1339,6 +1994,14 @@ async function staffLogin(){
   }
 
   document.getElementById("staffLogin").classList.add("hidden");
+
+  if(profile.role==="superuser"){
+    document.getElementById("staffPanel").classList.add("hidden");
+    await startGuidedAdmin();
+    return;
+  }
+
+  document.querySelector(".nav")?.classList.add("hidden");
   document.getElementById("staffPanel").classList.remove("hidden");
   await loadHallsAndDisplays();
   await loadServiceLocations();
@@ -1356,7 +2019,7 @@ async function staffLogout(){
   document.getElementById("staffPanel").classList.add("hidden");
   document.getElementById("staffLogin").classList.remove("hidden");
   document.getElementById("staffPassword").value="";
-  showView("visitor");
+  showLoginOnly();
 }
 let availableWorkCounters=[];
 
@@ -1458,6 +2121,33 @@ function locationAllowsTicket(location,t){
   return allowed.includes(t.dept);
 }
 
+function centralRouteKeysForDepartments(departmentSlugs){
+  const allowed=new Set(departmentSlugs || []);
+  const keys=[];
+
+  (serviceCatalog || []).filter(s=>s.active && allowed.has(s.department)).forEach(s=>{
+    if(!s.requires_college){
+      keys.push(`${s.department}${s.section?`|${s.section}`:""}|${s.service_name}`);
+      return;
+    }
+
+    if(!s.requires_letter){
+      (departments?.records?.colleges || []).forEach(c=>{
+        keys.push(`${s.department}${s.section?`|${s.section}`:""}|${s.service_name}|${c}`);
+      });
+      return;
+    }
+
+    (gradColleges||[]).forEach(c=>{
+      (gradRanges[c]||[["أ","ي"]]).forEach(r=>{
+        keys.push(`${s.department}${s.section?`|${s.section}`:""}|${s.service_name}|${c}|${r[0]}–${r[1]}`);
+      });
+    });
+  });
+
+  return [...new Set(keys)];
+}
+
 async function applyStaffWorkstation(){
   if(!staff) return;
 
@@ -1533,7 +2223,11 @@ async function applyStaffWorkstation(){
 
   // A change of physical location may invalidate previously selected queues.
   // Keep only queues that are both centrally authorized and belong to this location.
-  const allowedAtLocation=(staff.centralPermissions || []).filter(key=>{
+  const permissionSource=staff.role==="superuser"
+    ? centralRouteKeysForDepartments(staff.locationDepartments)
+    : (staff.centralPermissions || []);
+
+  const allowedAtLocation=permissionSource.filter(key=>{
     const dept=String(key||"").split("|")[0];
     return staff.locationDepartments.includes(dept);
   });
@@ -1586,7 +2280,9 @@ function renderAuthorizedQueueSelector(){
   const summary=document.getElementById("activeQueueSummary");
   if(!box || !staff) return;
 
-  const central=staff.centralPermissions || staff.permissions || [];
+  const central=staff.role==="superuser"
+    ? centralRouteKeysForDepartments(staff.locationDepartments || [])
+    : (staff.centralPermissions || staff.permissions || []);
 
   if(!staff.locationSlug){
     box.innerHTML=`<div class="muted">يرجى اختيار موقع الخدمة أولاً.</div>`;
@@ -1659,8 +2355,12 @@ async function applyAuthorizedQueueSelection(){
   // Never allow the counter to activate a route outside either:
   // (1) the superuser-granted permissions, or
   // (2) the departments assigned to the selected service location.
+  const sourcePermissions=staff.role==="superuser"
+    ? centralRouteKeysForDepartments(staff.locationDepartments || [])
+    : (staff.centralPermissions || []);
+
   const allowed=new Set(
-    (staff.centralPermissions || []).filter(key=>{
+    sourcePermissions.filter(key=>{
       const dept=String(key||"").split("|")[0];
       return (staff.locationDepartments || []).includes(dept);
     })
@@ -4134,7 +4834,7 @@ async function saveNewPassword(){
     await supabaseClient.auth.signOut();
     // Remove recovery hash/query fragments from the URL before returning to normal app.
     window.history.replaceState({}, document.title, window.location.pathname);
-    showView("visitor");
+    showLoginOnly();
   },1200);
 }
 
@@ -4163,9 +4863,7 @@ async function handleRecoveryMode(){
     if(!locationMode){
       const displayMode=await applyDisplayUrl();
       if(!displayMode){
-        restoreGeneralChrome();
-        visitorHome();
-        renderDisplay();
+        showLoginOnly();
       }
     }
   }
