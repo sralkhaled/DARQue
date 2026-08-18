@@ -1189,12 +1189,30 @@ function renderGraduateSections(){
 function chooseGradSection(s){ visitorState.section=s; renderServices(); }
 
 function currentConfig(){
-  if(visitorState.dept==="independent") return {name:"خدمة مستقلة",services:[]};
-  if(visitorState.dept==="graduates") return departments.graduates.sections[visitorState.section];
-  if(departments[visitorState.dept]) return departments[visitorState.dept];
+  const d=visitorState.dept;
 
-  const d=customDepartment(visitorState.dept);
-  return d ? {name:d.name,services:catalogServices(d.slug)} : null;
+  if(d==="graduates"){
+    const sec=visitorState.section;
+    if(!sec) return null;
+    return {
+      services:(serviceCatalog || [])
+        .filter(s=>s.active && s.department==="graduates" && s.section===sec)
+        .map(s=>s.service_name)
+    };
+  }
+
+  // Central service_catalog is authoritative for all departments,
+  // including bespoke ones such as مكتب العميد.
+  const catalogServices=(serviceCatalog || [])
+    .filter(s=>s.active && s.department===d && !s.section)
+    .map(s=>s.service_name);
+
+  if(catalogServices.length){
+    return {services:catalogServices};
+  }
+
+  // Backward-compatible fallback for built-in department definitions.
+  return departments?.[d] || {services:[]};
 }
 
 function catalogServices(dept, section=null, includeInactive=false){
@@ -1232,20 +1250,52 @@ function catalogServices(dept, section=null, includeInactive=false){
 }
 
 function renderServices(){
-  const cfg=currentConfig();
-  const deptName=visitorState.dept==="graduates" ? `إدارة الخريجين / ${cfg.name}` : departments[visitorState.dept].name;
-  const services=catalogServices(visitorState.dept, visitorState.section);
-
   const root=document.getElementById("visitorRoot");
+  const cfg=currentConfig();
+
+  if(!cfg){
+    root.innerHTML=`
+      <div class="card">
+        <h2>الخدمة غير متاحة</h2>
+        <div class="muted">تعذر تحميل إعداد هذه الإدارة.</div>
+        <div class="actions"><button class="btn" onclick="visitorRoot()">رجوع</button></div>
+      </div>`;
+    return;
+  }
+
+  // Built-in departments still use the original local config.
+  // Bespoke/custom departments resolve their display name from department_catalog.
+  const builtInName=departments?.[visitorState.dept]?.name || null;
+  const catalogRow=(departmentCatalog || []).find(
+    d=>d.slug===visitorState.dept
+  );
+  const deptName=builtInName || catalogRow?.name || "الإدارة";
+
+  const services=(cfg.services || []).filter(Boolean);
+
   root.innerHTML=`
-    <div class="breadcrumb">الرئيسية / ${deptName}</div>
+    <div class="crumb">الرئيسية / ${deptName}</div>
     <div class="card">
-      <h2 class="section-title">${deptName}</h2>
-      <p class="muted">اختر الخدمة</p>
-      <div class="grid">
-        ${services.map((s,i)=>`<div class="card choice" onclick="chooseService(${i})"><strong>${s.service_name}</strong><span>اضغط للمتابعة</span></div>`).join("")}
+      <h2>${deptName}</h2>
+      <div class="muted">اختر الخدمة</div>
+
+      ${
+        services.length
+          ? `<div class="grid choices" style="margin-top:18px">
+              ${services.map(s=>`
+                <div class="card choice" onclick="chooseService('${String(s).replace(/'/g,"&#39;")}')">
+                  <strong>${s}</strong>
+                  <span>اضغط للمتابعة</span>
+                </div>`).join("")}
+            </div>`
+          : `<div class="notice" style="margin-top:18px">
+              لا توجد خدمات مضافة لهذه الإدارة حالياً.
+            </div>`
+      }
+
+      <div class="actions" style="margin-top:18px">
+        <button class="btn" onclick="visitorRoot()">رجوع</button>
       </div>
-      <div class="actions"><button class="btn" onclick="${visitorState.dept==="graduates"?"renderGraduateSections()":"visitorRoot()"}">رجوع</button></div>
     </div>`;
 }
 
