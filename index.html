@@ -1194,25 +1194,34 @@ function currentConfig(){
   if(d==="graduates"){
     const sec=visitorState.section;
     if(!sec) return null;
+
+    const rows=(serviceCatalog || []).filter(
+      s=>s.active && s.department==="graduates" && s.section===sec
+    );
+
     return {
-      services:(serviceCatalog || [])
-        .filter(s=>s.active && s.department==="graduates" && s.section===sec)
-        .map(s=>s.service_name)
+      services:rows.map(s=>s.service_name),
+      serviceRows:rows
     };
   }
 
-  // Central service_catalog is authoritative for all departments,
-  // including bespoke ones such as مكتب العميد.
-  const catalogServices=(serviceCatalog || [])
-    .filter(s=>s.active && s.department===d && !s.section)
-    .map(s=>s.service_name);
+  const rows=(serviceCatalog || []).filter(
+    s=>s.active && s.department===d && !s.section
+  );
 
-  if(catalogServices.length){
-    return {services:catalogServices};
+  if(rows.length){
+    return {
+      services:rows.map(s=>s.service_name),
+      serviceRows:rows
+    };
   }
 
-  // Backward-compatible fallback for built-in department definitions.
-  return departments?.[d] || {services:[]};
+  const fallback=departments?.[d];
+  if(fallback){
+    return fallback;
+  }
+
+  return {services:[],serviceRows:[]};
 }
 
 function catalogServices(dept, section=null, includeInactive=false){
@@ -1299,19 +1308,28 @@ function renderServices(){
     </div>`;
 }
 
-function chooseService(i){
-  const services=catalogServices(visitorState.dept, visitorState.section);
-  const svc=services[i];
-  if(!svc) return;
+function chooseService(serviceName){
+  visitorState.service=serviceName;
 
-  visitorState.service=svc.service_name;
-  visitorState.serviceMeta=svc;
-  visitorState.college=null;
-  visitorState.letter=null;
+  const serviceRow=(serviceCatalog || []).find(
+    s=>s.active &&
+       s.department===visitorState.dept &&
+       (s.section || null)===(visitorState.section || null) &&
+       s.service_name===serviceName
+  ) || null;
 
-  if(svc.requires_college){
-    if(visitorState.dept==="graduates") renderGradColleges();
-    else renderRecordColleges();
+  // Bespoke/custom departments normally have no college/letter routing,
+  // but respect the central catalog if those flags are ever enabled.
+  const requiresCollege=!!serviceRow?.requires_college;
+  const requiresLetter=!!serviceRow?.requires_letter;
+
+  if(requiresCollege){
+    chooseCollege();
+    return;
+  }
+
+  if(requiresLetter){
+    chooseLetter();
     return;
   }
 
