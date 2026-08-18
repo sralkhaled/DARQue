@@ -930,7 +930,7 @@
           <div class="label">رقم انتظارك</div>
           <div id="visitorWaitingOwnNumber" class="num">—</div>
           <div id="visitorWaitingOwnLocation" class="place"></div>
-          <div class="muted" style="margin-top:14px">يرجى متابعة شاشة النداء لمعرفة دورك والكاونتر</div>
+          <div id="visitorWaitingHint" class="muted" style="margin-top:14px">يرجى متابعة النداء لمعرفة دورك</div>
         </aside>
         <div class="visitor-live-side">
           <h2 id="visitorWaitingScreenTitle">شاشة النداء</h2>
@@ -3349,13 +3349,15 @@ async function renderDisplay(){
       </option>`).join("");
 
   if(!cfg){
-    title.textContent="الرجاء اختيار شاشة النداء";
-    latestBox.innerHTML=`<div class="call-card" style="grid-column:1/-1"><div class="muted">لم يتم تحديد شاشة نداء</div></div>`;
+    title.textContent="الرجاء اختيار موقع الخدمة";
+    latestBox.innerHTML=`<div class="call-card" style="grid-column:1/-1"><div class="muted">لم يتم تحديد موقع خدمة</div></div>`;
     historyBox.innerHTML="";
     return;
   }
 
-  title.textContent=cfg.name;
+  title.textContent=currentServiceLocation?.name
+    ? String(currentServiceLocation.name).replace(/^شاشة\s+/,"")
+    : String(cfg.name || "").replace(/^شاشة\s+/,"");
 
   // When this screen was reached through a configured service location
   // (?display=<location-slug> or after a QR-issued ticket), the location's
@@ -3394,14 +3396,14 @@ async function renderDisplay(){
       noLocationDepartments ? "لم يتم تحديد إدارات لهذا الموقع" : "بانتظار أول نداء"
     }</div></div>`;
   }else{
-    const destination=latest.counter_number ? `كاونتر ${latest.counter_number}` : cfg.name;
+    const destination=latest.counter_number ? `كاونتر ${latest.counter_number}` : (currentServiceLocation?.name || cfg.name).replace(/^شاشة\s+/,"");
     latestBox.innerHTML=`
       <div class="call-card"><div class="muted">رقم الانتظار</div><div class="n">${latest.ticket_number}</div></div>
       <div class="call-card"><div class="muted">يرجى التوجه إلى</div><div class="c">${destination}</div></div>`;
   }
 
   historyBox.innerHTML=filtered.slice(1).map(c=>{
-    const destination=c.counter_number ? `كاونتر ${c.counter_number}` : cfg.name;
+    const destination=c.counter_number ? `كاونتر ${c.counter_number}` : (currentServiceLocation?.name || cfg.name).replace(/^شاشة\s+/,"");
     return `<div class="hist"><b style="font-size:26px">${c.ticket_number}</b><div>${destination}</div></div>`;
   }).join("");
 }
@@ -4029,6 +4031,19 @@ function chooseLocationDepartment(dept){
   if(!locationDepartmentSlugs().includes(dept))return;
   chooseDept(dept);
 }
+function visitorFacingLocationName(){
+  const raw=String(currentServiceLocation?.name || "").trim();
+  return raw.replace(/^شاشة\s+/,"") || "موقع الخدمة";
+}
+
+function visitorDestinationLabel(call,cfg){
+  if(call?.counter_number){
+    return `كاونتر ${call.counter_number}`;
+  }
+
+  return visitorFacingLocationName();
+}
+
 function currentVisitorTicketNumber(){
   return visitorState?.ticket?.ticket_number ||
          visitorState?.ticket?.number ||
@@ -4063,12 +4078,21 @@ async function renderVisitorWaiting(){
   const title=document.getElementById("visitorWaitingScreenTitle");
   const latestBox=document.getElementById("visitorWaitingLatest");
   const historyBox=document.getElementById("visitorWaitingHistory");
+  const hint=document.getElementById("visitorWaitingHint");
 
   if(ownEl) ownEl.textContent=ownNumber || "—";
-  if(locEl) locEl.textContent=currentServiceLocation.name || "";
+  const visitorLocationName=visitorFacingLocationName();
+  if(locEl) locEl.textContent=visitorLocationName;
 
   const cfg=currentServiceLocation.display_configs;
-  if(title) title.textContent=cfg?.name || "شاشة النداء";
+  if(title) title.textContent=visitorLocationName;
+
+  const hasCounters=displayRequiresCounter(cfg);
+  if(hint){
+    hint.textContent=hasCounters
+      ? "يرجى متابعة النداء لمعرفة دورك والكاونتر"
+      : "يرجى متابعة النداء لمعرفة دورك";
+  }
 
   const {data,error}=await supabaseClient.rpc("get_location_display_calls",{
     p_location_slug:currentServiceLocation.slug
@@ -4087,7 +4111,7 @@ async function renderVisitorWaiting(){
   if(!latest){
     if(latestBox) latestBox.innerHTML=`<div class="call-card" style="grid-column:1/-1"><div class="muted">بانتظار أول نداء</div></div>`;
   }else{
-    const destination=latest.counter_number ? `كاونتر ${latest.counter_number}` : (cfg?.name || "موقع الخدمة");
+    const destination=visitorDestinationLabel(latest,cfg);
     if(latestBox) latestBox.innerHTML=`
       <div class="call-card"><div class="muted">رقم الانتظار</div><div class="n">${latest.ticket_number}</div></div>
       <div class="call-card"><div class="muted">يرجى التوجه إلى</div><div class="c">${destination}</div></div>`;
@@ -4095,7 +4119,7 @@ async function renderVisitorWaiting(){
 
   if(historyBox){
     historyBox.innerHTML=calls.slice(1).map(c=>{
-      const destination=c.counter_number ? `كاونتر ${c.counter_number}` : (cfg?.name || "موقع الخدمة");
+      const destination=visitorDestinationLabel(c,cfg);
       return `<div class="hist"><b style="font-size:26px">${c.ticket_number}</b><div>${destination}</div></div>`;
     }).join("");
   }
