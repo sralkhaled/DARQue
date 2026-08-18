@@ -295,9 +295,9 @@
         <div id="guidedMessage" class="notice hidden"></div>
 
         <div class="guided-step" data-step="1">
-          <h3 class="section-title">أين سيتم تقديم الخدمة؟</h3>
+          <h3 class="section-title" id="guidedLocationStepTitle">إضافة موقع خدمة</h3>
           <div class="field">
-            <label>اختر موقعاً قائماً</label>
+            <label>اختر موقعاً قائماً للتعديل أو اختر إضافة موقع جديد</label>
             <select id="guidedExistingLocation" onchange="guidedExistingLocationChanged()">
               <option value="">إضافة موقع جديد</option>
             </select>
@@ -314,6 +314,7 @@
           </div>
           <div class="actions">
             <button class="btn primary" onclick="guidedNextFromLocation()">التالي</button>
+            <button class="btn danger hidden" id="guidedDeleteLocationBtn" onclick="guidedDeleteCurrentLocation()">حذف الموقع</button>
             <button class="btn" onclick="openAdvancedAdmin()">إعدادات النظام</button>
             <button class="btn" onclick="staffLogout()">تسجيل الخروج</button>
           </div>
@@ -1525,6 +1526,23 @@ function guidedGoToStep(step){
   if(step===5) guidedRenderFinish();
 }
 
+function guidedRefreshLocationDropdown(selectedId=""){
+  const select=document.getElementById("guidedExistingLocation");
+  if(!select) return;
+
+  const rows=[...(serviceLocations||[])].sort(
+    (a,b)=>(Number(a.sort_order||100)-Number(b.sort_order||100)) ||
+          String(a.name||"").localeCompare(String(b.name||""),"ar")
+  );
+
+  select.innerHTML=`<option value="">إضافة موقع جديد</option>`+
+    rows.map(l=>`<option value="${l.id}">${l.name}${l.active ? "" : " — موقوف"}</option>`).join("");
+
+  if(selectedId && [...select.options].some(o=>o.value===String(selectedId))){
+    select.value=String(selectedId);
+  }
+}
+
 async function startGuidedAdmin(){
   const nav=document.querySelector(".nav");
   if(nav) nav.classList.remove("hidden");
@@ -1543,10 +1561,7 @@ async function startGuidedAdmin(){
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   document.getElementById("guidedAdmin").classList.add("active");
 
-  const select=document.getElementById("guidedExistingLocation");
-  select.innerHTML=`<option value="">إضافة موقع جديد</option>`+
-    (serviceLocations||[]).map(l=>`<option value="${l.id}">${l.name}</option>`).join("");
-
+  guidedRefreshLocationDropdown();
   guidedStartAnother(false);
 }
 
@@ -1561,14 +1576,16 @@ function guidedStartAnother(refresh=true){
   document.getElementById("guidedLocationSlug").value="";
   document.getElementById("guidedCountersYes").checked=true;
   document.getElementById("guidedCounterCount").value="1";
+  const title=document.getElementById("guidedLocationStepTitle");
+  const deleteBtn=document.getElementById("guidedDeleteLocationBtn");
+  if(title) title.textContent="إضافة موقع خدمة";
+  if(deleteBtn) deleteBtn.classList.add("hidden");
   guidedCounterModeChanged();
   guidedGoToStep(1);
 
   if(refresh){
     loadServiceLocations().then(()=>{
-      const s=document.getElementById("guidedExistingLocation");
-      s.innerHTML=`<option value="">إضافة موقع جديد</option>`+
-        (serviceLocations||[]).map(l=>`<option value="${l.id}">${l.name}</option>`).join("");
+      guidedRefreshLocationDropdown();
     });
   }
 }
@@ -1576,11 +1593,17 @@ function guidedStartAnother(refresh=true){
 function guidedExistingLocationChanged(){
   const id=Number(document.getElementById("guidedExistingLocation").value||0);
   const l=(serviceLocations||[]).find(x=>Number(x.id)===id) || null;
+  const title=document.getElementById("guidedLocationStepTitle");
+  const deleteBtn=document.getElementById("guidedDeleteLocationBtn");
 
   if(!l){
     guidedSetup.locationId=null;
+    guidedSetup.displayId=null;
+    guidedSetup.departments=[];
     document.getElementById("guidedLocationName").value="";
     document.getElementById("guidedLocationSlug").value="";
+    if(title) title.textContent="إضافة موقع خدمة";
+    if(deleteBtn) deleteBtn.classList.add("hidden");
     return;
   }
 
@@ -1588,13 +1611,47 @@ function guidedExistingLocationChanged(){
   guidedSetup.displayId=l.display_id;
   document.getElementById("guidedLocationName").value=l.name || "";
   document.getElementById("guidedLocationSlug").value=l.slug || "";
+  if(title) title.textContent=`تعديل الموقع: ${l.name}`;
+  if(deleteBtn) deleteBtn.classList.remove("hidden");
 
   const cfg=locationDisplayConfig(l);
   const hasCounters=displayRequiresCounter(cfg);
   document.getElementById(hasCounters?"guidedCountersYes":"guidedCountersNo").checked=true;
   guidedCounterModeChanged();
 
+  if(hasCounters && cfg?.hall_id){
+    const count=(availableWorkCounters||[]).filter(
+      c=>Number(c.hall_id)===Number(cfg.hall_id) && c.active
+    ).length;
+    if(count>0) document.getElementById("guidedCounterCount").value=String(count);
+  }
+
   guidedSetup.departments=(l.service_location_departments||[]).map(x=>x.department);
+}
+
+async function guidedDeleteCurrentLocation(){
+  const id=Number(guidedSetup.locationId||0);
+  const l=(serviceLocations||[]).find(x=>Number(x.id)===id);
+  if(!l) return;
+
+  const ok=confirm(
+    `هل تريد حذف الموقع "${l.name}" نهائياً؟\n\n`+
+    `لن يتم حذف التذاكر التاريخية.`
+  );
+  if(!ok) return;
+
+  const {error}=await supabaseClient.rpc("delete_service_location_safe",{p_location_id:id});
+  if(error){
+    guidedSetMessage(`تعذر حذف الموقع: ${error.message}`,true);
+    return;
+  }
+
+  await loadHallsAndDisplays();
+  await loadServiceLocations();
+  await loadAvailableWorkCounters();
+  guidedRefreshLocationDropdown();
+  guidedStartAnother(false);
+  guidedSetMessage("تم حذف الموقع.");
 }
 
 function guidedNextFromLocation(){
@@ -1777,6 +1834,7 @@ async function guidedSaveLocationSetup(){
 
     await loadHallsAndDisplays();
     await loadServiceLocations();
+    guidedRefreshLocationDropdown(locationId);
     await loadAvailableWorkCounters();
     guidedGoToStep(4);
   }catch(err){
@@ -3671,9 +3729,31 @@ function renderServiceLocationAdminTable(){
         <button class="btn" onclick="copyTextUrl(visitorLocationUrl('${l.slug}'),'تم نسخ رابط المراجع / QR.')">رابط المراجع / QR</button>
         <button class="btn" onclick="copyTextUrl(screenLocationUrl('${l.slug}'),'تم نسخ رابط شاشة النداء.')">رابط شاشة النداء</button>
         <button class="btn" onclick="toggleServiceLocation(${l.id},${l.active?"false":"true"})">${l.active?"إيقاف":"تفعيل"}</button>
+        <button class="btn danger" onclick="deleteServiceLocation(${l.id})">حذف</button>
       </div>
     </td>
   </tr>`).join("");
+}
+
+async function deleteServiceLocation(id){
+  const l=(serviceLocations||[]).find(x=>Number(x.id)===Number(id));
+  if(!l) return;
+
+  const ok=confirm(`هل تريد حذف الموقع "${l.name}" نهائياً؟\n\nلن يتم حذف التذاكر التاريخية.`);
+  if(!ok) return;
+
+  const {error}=await supabaseClient.rpc("delete_service_location_safe",{p_location_id:Number(id)});
+  if(error){
+    alert(`تعذر حذف الموقع: ${error.message}`);
+    return;
+  }
+
+  await loadHallsAndDisplays();
+  await loadServiceLocations();
+  await loadAvailableWorkCounters();
+  guidedRefreshLocationDropdown();
+  renderServiceLocationAdminTable();
+  alert("تم حذف الموقع.");
 }
 
 async function toggleServiceLocation(id,active){
@@ -4751,6 +4831,7 @@ function renderAdminUsers(){
           <button class="btn" style="padding:7px 10px" onclick="openEditUser('${u.id}')">تعديل</button>
           <button class="btn" style="padding:7px 10px" onclick="openPasswordReset('${u.id}')">كلمة المرور</button>
           <button class="btn" style="padding:7px 10px" onclick="toggleUserStatus('${u.id}', ${u.active ? "false" : "true"})">${u.active ? "إيقاف" : "تفعيل"}</button>
+          <button class="btn danger" style="padding:7px 10px" onclick="deleteAdminUser('${u.id}')">حذف</button>
         </div>
       </td>
     </tr>
@@ -4928,6 +5009,31 @@ async function saveUserPassword(){
     btn.disabled=false;
     btn.textContent="تحديث كلمة المرور";
   }
+}
+
+async function deleteAdminUser(userId){
+  const u=(adminUsers||[]).find(x=>x.id===userId);
+  if(!u) return;
+
+  if(staff?.userId===userId){
+    alert("لا يمكن حذف حسابك الحالي أثناء تسجيل الدخول.");
+    return;
+  }
+
+  const label=u.full_name || u.username || "المستخدم";
+  const ok=confirm(
+    `هل تريد حذف المستخدم "${label}" نهائياً؟\n\n`+
+    `سيتم حذف حساب تسجيل الدخول وملف المستخدم وصلاحياته. لا يمكن التراجع عن هذا الإجراء.`
+  );
+  if(!ok) return;
+
+  const {data,error}=await supabaseClient.functions.invoke("delete-staff-user",{body:{user_id:userId}});
+  if(error){ alert(`تعذر حذف المستخدم: ${error.message}`); return; }
+  if(data?.error){ alert(`تعذر حذف المستخدم: ${data.error}`); return; }
+
+  await loadAdminUsers();
+  renderAdminUsers();
+  alert("تم حذف المستخدم.");
 }
 
 async function toggleUserStatus(id, newActive){
