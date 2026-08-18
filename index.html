@@ -1781,32 +1781,99 @@ async function guidedAddCustomDepartment(){
 
   const slug=makeDepartmentSlug(name);
 
-  const {error:deptError}=await supabaseClient.from("department_catalog").insert({
-    slug,name,ticket_prefix:prefix,built_in:false,active:true,sort_order:100
-  });
-  if(deptError && deptError.code!=="23505"){
-    guidedSetMessage(`تعذر إضافة الإدارة: ${deptError.message}`,true);
-    return;
+  // If the bespoke department already exists, update its visible name/prefix.
+  // This is important for locations created before a prefix was entered.
+  const existing=(departmentCatalog || []).find(
+    d=>d.slug===slug || String(d.name||"").trim()===name
+  ) || null;
+
+  let departmentSlug=slug;
+
+  if(existing){
+    departmentSlug=existing.slug;
+
+    const {error:updateError}=await supabaseClient
+      .from("department_catalog")
+      .update({
+        name,
+        ticket_prefix:prefix,
+        active:true
+      })
+      .eq("id",existing.id);
+
+    if(updateError){
+      guidedSetMessage(`تعذر تحديث الإدارة: ${updateError.message}`,true);
+      return;
+    }
+  }else{
+    const {error:deptError}=await supabaseClient
+      .from("department_catalog")
+      .insert({
+        slug,
+        name,
+        ticket_prefix:prefix,
+        built_in:false,
+        active:true,
+        sort_order:100
+      });
+
+    if(deptError){
+      guidedSetMessage(`تعذر إضافة الإدارة: ${deptError.message}`,true);
+      return;
+    }
   }
 
-  const {error:svcError}=await supabaseClient.from("service_catalog").insert({
-    department:slug,section:null,service_name:serviceName,
-    requires_college:false,requires_letter:false,ticket_prefix:null,
-    active:true,sort_order:100
-  });
-  if(svcError && svcError.code!=="23505"){
-    guidedSetMessage(`تعذر إضافة الخدمة: ${svcError.message}`,true);
-    return;
+  // Add the service if it does not already exist.
+  const existingService=(serviceCatalog || []).find(
+    s=>s.department===departmentSlug &&
+       !s.section &&
+       String(s.service_name||"").trim()===serviceName
+  ) || null;
+
+  if(existingService){
+    const {error:svcUpdateError}=await supabaseClient
+      .from("service_catalog")
+      .update({active:true})
+      .eq("id",existingService.id);
+
+    if(svcUpdateError){
+      guidedSetMessage(`تعذر تحديث الخدمة: ${svcUpdateError.message}`,true);
+      return;
+    }
+  }else{
+    const {error:svcError}=await supabaseClient
+      .from("service_catalog")
+      .insert({
+        department:departmentSlug,
+        section:null,
+        service_name:serviceName,
+        requires_college:false,
+        requires_letter:false,
+        ticket_prefix:null,
+        active:true,
+        sort_order:100
+      });
+
+    if(svcError){
+      guidedSetMessage(`تعذر إضافة الخدمة: ${svcError.message}`,true);
+      return;
+    }
   }
 
   await loadDepartmentCatalog();
   await loadServiceCatalog();
-  guidedSetup.departments=[...new Set([...(guidedSetup.departments||[]),slug])];
+
+  guidedSetup.departments=[
+    ...new Set([...(guidedSetup.departments||[]),departmentSlug])
+  ];
+
   guidedRenderDepartments();
+
   document.getElementById("guidedCustomDeptName").value="";
   document.getElementById("guidedCustomDeptPrefix").value="";
   document.getElementById("guidedCustomServiceName").value="";
-  guidedSetMessage("تمت إضافة الإدارة والخدمة.");
+
+  guidedSetMessage("تم حفظ الإدارة وبادئة رقم الانتظار والخدمة.");
 }
 
 async function guidedSyncCounters(hallId,count){
