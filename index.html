@@ -134,6 +134,25 @@
   }
   .notice{background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;padding:12px 14px;border-radius:12px;margin-bottom:14px}
   .muted{color:var(--muted)} .hidden{display:none!important}
+
+  .oversight-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}
+  .oversight-stat{background:#fff;border:1px solid var(--border);border-radius:16px;padding:18px}
+  .oversight-stat .value{font-size:34px;font-weight:800;line-height:1;margin-top:8px}
+  .oversight-location{border:1px solid var(--border);border-radius:16px;padding:18px;background:#fff;margin-bottom:14px}
+  .oversight-location-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .oversight-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}
+  .oversight-metric{padding:12px;border-radius:12px;background:#f8fafc;border:1px solid #eef2f7}
+  .oversight-metric b{display:block;font-size:20px;margin-top:4px}
+  .presence-row{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px 0;border-top:1px solid #eef2f7;flex-wrap:wrap}
+  .status-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#16a34a;margin-left:6px}
+  .warning-box{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;padding:11px 13px;border-radius:12px;margin-top:10px}
+  @media(max-width:900px){
+    .oversight-summary,.oversight-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+  @media(max-width:560px){
+    .oversight-summary,.oversight-metrics{grid-template-columns:1fr}
+  }
+
 </style>
 </head>
 <body>
@@ -148,6 +167,7 @@
   </div>
   <div class="nav hidden">
     <button id="setupNavBtn" onclick="startGuidedAdmin()">إعداد موقع الخدمة</button>
+    <button id="oversightNavBtn" class="hidden" onclick="openOversightDashboard()">لوحة المتابعة</button>
     <button id="adminNavBtn" onclick="openAdvancedAdmin()">إعدادات النظام</button>
   </div>
 </header>
@@ -449,6 +469,62 @@
           </div>
         </div>
       </div>
+    </div>
+  </section>
+
+
+  <!-- GENERAL OVERSEER -->
+  <section id="oversight" class="view">
+    <div class="hero">
+      <h2>المشرف العام</h2>
+      <p>متابعة مباشرة لحركة مواقع الخدمة والموظفين والطوابير</p>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+      <div class="muted" id="oversightUpdatedAt">—</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" onclick="refreshOversightDashboard()">تحديث الآن</button>
+        <button class="btn" onclick="staffLogout()">تسجيل الخروج</button>
+      </div>
+    </div>
+
+    <div class="oversight-summary">
+      <div class="oversight-stat">
+        <div class="muted">المواقع المستخدمة الآن</div>
+        <div class="value" id="ovLocationsInUse">0</div>
+        <div class="muted" id="ovLocationsTotal">من 0 موقع</div>
+      </div>
+      <div class="oversight-stat">
+        <div class="muted">المراجعون المنتظرون</div>
+        <div class="value" id="ovWaiting">0</div>
+        <div class="muted">اليوم</div>
+      </div>
+      <div class="oversight-stat">
+        <div class="muted">الجاري خدمتهم</div>
+        <div class="value" id="ovCalled">0</div>
+        <div class="muted">الآن</div>
+      </div>
+      <div class="oversight-stat">
+        <div class="muted">الموظفون العاملون الآن</div>
+        <div class="value" id="ovStaffActive">0</div>
+        <div class="muted">حضور نشط</div>
+      </div>
+    </div>
+
+    <div id="oversightWarnings"></div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+        <div>
+          <h3 class="section-title" style="margin-bottom:4px">حالة مواقع الخدمة</h3>
+          <div class="muted">اضغط على أي موقع لعرض تفاصيل التشغيل الحالية</div>
+        </div>
+        <label class="check" style="margin:0">
+          <input type="checkbox" id="ovOnlyInUse" onchange="renderOversightLocations()">
+          عرض المواقع المستخدمة الآن فقط
+        </label>
+      </div>
+      <div id="oversightLocations"><div class="muted">جاري التحميل...</div></div>
     </div>
   </section>
 
@@ -1076,12 +1152,17 @@ function showView(id){
     alert("هذه الصفحة متاحة لمدير النظام فقط.");
     return;
   }
+  if(id==="oversight" && (!staff || !(staff.role==="overseer" || (staff.role==="superuser" && staff.canOversee)))){
+    alert("ليست لديك صلاحية لوحة المتابعة.");
+    return;
+  }
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   document.getElementById(id).classList.add("active");
   document.querySelectorAll(".nav button[data-view]").forEach(b=>b.classList.toggle("active",b.dataset.view===id));
   if(id==="display") renderDisplay();
   if(id==="staff" && staff) refreshStaff();
   if(id==="admin") loadAdminUsers();
+  if(id==="oversight") refreshOversightDashboard();
 }
 document.querySelectorAll(".nav button[data-view]").forEach(b=>b.onclick=()=>showView(b.dataset.view));
 
@@ -1612,6 +1693,9 @@ function guidedRefreshLocationDropdown(selectedId=""){
 }
 
 async function startGuidedAdmin(){
+  stopOversightAutoRefresh();
+  document.getElementById("oversightNavBtn")?.classList.remove("active");
+
   const nav=document.querySelector(".nav");
   if(nav) nav.classList.remove("hidden");
 
@@ -2366,6 +2450,9 @@ async function guidedOperateCounter(){
 }
 
 async function openAdvancedAdmin(){
+  stopOversightAutoRefresh();
+  document.getElementById("oversightNavBtn")?.classList.remove("active");
+
   const nav=document.querySelector(".nav");
   if(nav) nav.classList.remove("hidden");
 
@@ -2440,7 +2527,7 @@ async function staffLogin(){
 
   const { data:profile, error:profileError } = await supabaseClient
     .from("profiles")
-    .select("id,username,full_name,role,department,active,must_change_password")
+    .select("id,username,full_name,role,department,active,must_change_password,can_oversee")
     .eq("id",authData.user.id)
     .single();
 
@@ -2463,7 +2550,8 @@ async function staffLogin(){
       username:profile.username,
       name:profile.full_name,
       role:profile.role,
-      department:profile.department
+      department:profile.department,
+      canOversee:!!profile.can_oversee
     };
     document.getElementById("staffLogin").classList.add("hidden");
     showRequiredPasswordChange(profile.id);
@@ -2478,6 +2566,7 @@ async function staffLogin(){
     name:profile.full_name,
     role:profile.role,
     department:profile.department,
+    canOversee:!!profile.can_oversee,
     counter:"",
     counterId:null,
     hallId:null,
@@ -2496,7 +2585,20 @@ async function staffLogin(){
   };
 
   document.getElementById("adminNavBtn").classList.toggle("hidden", profile.role!=="superuser");
+  document.getElementById("oversightNavBtn")?.classList.toggle(
+    "hidden",
+    !(profile.role==="superuser" && profile.can_oversee===true)
+  );
   document.getElementById("superuserQuickAccess").classList.toggle("hidden", profile.role!=="superuser");
+
+  if(profile.role==="overseer"){
+    document.getElementById("staffLogin").classList.add("hidden");
+    document.getElementById("staffPanel").classList.add("hidden");
+    document.querySelector(".nav")?.classList.add("hidden");
+    showView("oversight");
+    startOversightAutoRefresh();
+    return;
+  }
 
   if(profile.role!=="superuser" && staff.permissions.length===0){
     alert("لا توجد صلاحيات خدمة مركزية مرتبطة بهذا المستخدم. يرجى مراجعة مدير النظام.");
@@ -2520,10 +2622,20 @@ async function staffLogin(){
 }
 
 async function staffLogout(){
+  try{
+    if(staff?.userId && staff.role!=="overseer"){
+      await supabaseClient.rpc("clear_staff_presence");
+    }
+  }catch(e){
+    console.warn("Presence clear failed:",e);
+  }
+  stopStaffPresenceHeartbeat();
+  stopOversightAutoRefresh();
   await supabaseClient.auth.signOut();
   staff=null;
   current=null;
   document.getElementById("adminNavBtn").classList.add("hidden");
+  document.getElementById("oversightNavBtn")?.classList.add("hidden");
   document.getElementById("superuserQuickAccess").classList.add("hidden");
   document.getElementById("staffPanel").classList.add("hidden");
   document.getElementById("staffLogin").classList.remove("hidden");
@@ -2747,6 +2859,8 @@ async function applyStaffWorkstation(){
   }
 
   renderPermissions();
+  await touchStaffPresence();
+  startStaffPresenceHeartbeat();
   await refreshStaff();
 }
 
@@ -2776,7 +2890,7 @@ function permissionKeyLabel(key){
 }
 
 function renderPermissions(){
-  const roleLabel=staff.role==="superuser" ? "مدير النظام" : "موظف";
+  const roleLabel=staff.role==="overseer" ? "المشرف العام" : (staff.role==="superuser" ? "مدير النظام" : "موظف");
   const counterPart=staff.counter ? ` — الكاونتر: <b>${staff.counter}</b>` : "";
   document.getElementById("staffIdentity").innerHTML=`الموظف: <b>${staff.name}</b> — الصلاحية: <b>${roleLabel}</b> — موقع الخدمة: <b>${staff.locationName || "غير معين"}</b>${counterPart}`;
 
@@ -4906,6 +5020,182 @@ async function clearAllUserPermissions(){
 
   await loadCurrentUserPermissions();
 }
+
+
+let staffPresenceTimer=null;
+let oversightTimer=null;
+let oversightData={summary:{},locations:[],warnings:[]};
+
+async function touchStaffPresence(){
+  if(!staff?.userId || !staff?.locationId || staff.role==="overseer") return;
+
+  const {error}=await supabaseClient.rpc("touch_staff_presence",{
+    p_location_id:Number(staff.locationId),
+    p_counter_id:staff.counterId ? Number(staff.counterId) : null
+  });
+
+  if(error) console.warn("Presence heartbeat failed:",error);
+}
+
+function startStaffPresenceHeartbeat(){
+  stopStaffPresenceHeartbeat();
+  touchStaffPresence();
+  staffPresenceTimer=setInterval(touchStaffPresence,60000);
+}
+
+function stopStaffPresenceHeartbeat(){
+  if(staffPresenceTimer){
+    clearInterval(staffPresenceTimer);
+    staffPresenceTimer=null;
+  }
+}
+
+function openOversightDashboard(){
+  if(!staff || !(staff.role==="overseer" || (staff.role==="superuser" && staff.canOversee))){
+    alert("ليست لديك صلاحية لوحة المتابعة.");
+    return;
+  }
+
+  document.querySelector(".nav")?.classList.remove("hidden");
+  document.getElementById("setupNavBtn")?.classList.remove("active");
+  document.getElementById("adminNavBtn")?.classList.remove("active");
+  document.getElementById("oversightNavBtn")?.classList.add("active");
+  showView("oversight");
+  startOversightAutoRefresh();
+}
+
+function startOversightAutoRefresh(){
+  stopOversightAutoRefresh();
+  refreshOversightDashboard();
+  oversightTimer=setInterval(refreshOversightDashboard,30000);
+}
+
+function stopOversightAutoRefresh(){
+  if(oversightTimer){
+    clearInterval(oversightTimer);
+    oversightTimer=null;
+  }
+}
+
+function oversightTimeLabel(iso){
+  if(!iso) return "—";
+  try{
+    return new Intl.DateTimeFormat("ar-KW",{
+      hour:"2-digit",minute:"2-digit",hour12:true,timeZone:"Asia/Kuwait"
+    }).format(new Date(iso));
+  }catch(e){
+    return "—";
+  }
+}
+
+function oversightDuration(minutes){
+  const n=Math.max(0,Math.round(Number(minutes||0)));
+  if(n<60) return `${n} دقيقة`;
+  const h=Math.floor(n/60),m=n%60;
+  return m ? `${h} س ${m} د` : `${h} ساعة`;
+}
+
+async function refreshOversightDashboard(){
+  if(!staff || !(staff.role==="overseer" || (staff.role==="superuser" && staff.canOversee))) return;
+
+  const box=document.getElementById("oversightLocations");
+  if(box && !oversightData.locations?.length){
+    box.innerHTML=`<div class="muted">جاري تحميل حالة مواقع الخدمة...</div>`;
+  }
+
+  const {data,error}=await supabaseClient.rpc("get_oversight_dashboard");
+  if(error){
+    console.error("Oversight dashboard read failed:",error);
+    if(box) box.innerHTML=`<div class="notice">تعذر تحميل لوحة المتابعة: ${error.message}</div>`;
+    return;
+  }
+
+  oversightData=data || {summary:{},locations:[],warnings:[]};
+  const s=oversightData.summary || {};
+
+  document.getElementById("ovLocationsInUse").textContent=s.locations_in_use ?? 0;
+  document.getElementById("ovLocationsTotal").textContent=`من ${s.locations_total ?? 0} موقع`;
+  document.getElementById("ovWaiting").textContent=s.waiting ?? 0;
+  document.getElementById("ovCalled").textContent=s.called ?? 0;
+  document.getElementById("ovStaffActive").textContent=s.staff_active ?? 0;
+  document.getElementById("oversightUpdatedAt").textContent=
+    `آخر تحديث: ${oversightTimeLabel(oversightData.generated_at)}`;
+
+  renderOversightWarnings();
+  renderOversightLocations();
+}
+
+function renderOversightWarnings(){
+  const box=document.getElementById("oversightWarnings");
+  if(!box) return;
+
+  const warnings=oversightData.warnings || [];
+  if(!warnings.length){
+    box.innerHTML="";
+    return;
+  }
+
+  box.innerHTML=warnings.map(w=>`
+    <div class="warning-box"><b>${w.location_name || "موقع الخدمة"}</b> — ${w.message}</div>
+  `).join("");
+}
+
+function renderOversightLocations(){
+  const box=document.getElementById("oversightLocations");
+  if(!box) return;
+
+  const onlyInUse=document.getElementById("ovOnlyInUse")?.checked;
+  let locations=oversightData.locations || [];
+  if(onlyInUse) locations=locations.filter(l=>l.in_use);
+
+  if(!locations.length){
+    box.innerHTML=`<div class="muted" style="padding:18px 0">لا توجد مواقع مطابقة.</div>`;
+    return;
+  }
+
+  box.innerHTML=locations.map(l=>{
+    const staffRows=(l.staff || []);
+    const staffHtml=staffRows.length ? staffRows.map(p=>`
+      <div class="presence-row">
+        <div>
+          <span class="status-dot"></span>
+          <b>${p.full_name || p.username || "موظف"}</b>
+          <span class="muted"> — ${p.role==="superuser"?"مدير النظام":"موظف"}</span>
+        </div>
+        <div>
+          ${p.counter_number ? `<span class="tag">كاونتر ${p.counter_number}</span>` : `<span class="tag">${l.name}</span>`}
+          ${p.current_ticket ? `<span class="tag">الرقم الحالي ${p.current_ticket}</span>` : `<span class="muted">لا يوجد رقم حالي</span>`}
+          <span class="muted">آخر نشاط ${oversightTimeLabel(p.last_seen_at)}</span>
+        </div>
+      </div>
+    `).join("") : `<div class="muted" style="padding:10px 0">لا يوجد موظف عامل حالياً في هذا الموقع.</div>`;
+
+    const deptNames=(l.departments || []).map(departmentLabel).join("، ") || "—";
+
+    return `
+      <div class="oversight-location">
+        <div class="oversight-location-head">
+          <div>
+            <h3 style="margin:0 0 6px">${l.name}</h3>
+            <div class="muted">${deptNames}</div>
+          </div>
+          <span class="tag" style="${l.in_use?"":"background:#f1f5f9;color:#64748b"}">
+            ${l.in_use ? "قيد الاستخدام" : "غير مستخدم حالياً"}
+          </span>
+        </div>
+
+        <div class="oversight-metrics">
+          <div class="oversight-metric"><span class="muted">المنتظرون</span><b>${l.waiting ?? 0}</b></div>
+          <div class="oversight-metric"><span class="muted">الجاري خدمتهم</span><b>${l.called ?? 0}</b></div>
+          <div class="oversight-metric"><span class="muted">الموظفون</span><b>${l.staff_active ?? 0}</b></div>
+          <div class="oversight-metric"><span class="muted">أطول انتظار</span><b>${oversightDuration(l.longest_wait_minutes)}</b></div>
+        </div>
+
+        ${staffHtml}
+      </div>`;
+  }).join("");
+}
+
 
 let adminUsers=[];
 
