@@ -481,7 +481,7 @@
     </div>
 
     <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
-      <div class="muted" id="oversightUpdatedAt">—</div>
+      <div class="muted" id="oversightUpdatedAt">متصل بالتحديث المباشر...</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn" onclick="refreshOversightDashboard()">تحديث الآن</button>
         <button class="btn" onclick="staffLogout()">تسجيل الخروج</button>
@@ -5024,6 +5024,8 @@ async function clearAllUserPermissions(){
 
 let staffPresenceTimer=null;
 let oversightTimer=null;
+let oversightRealtimeChannel=null;
+let oversightRefreshDebounce=null;
 let oversightData={summary:{},locations:[],warnings:[]};
 
 async function touchStaffPresence(){
@@ -5040,7 +5042,7 @@ async function touchStaffPresence(){
 function startStaffPresenceHeartbeat(){
   stopStaffPresenceHeartbeat();
   touchStaffPresence();
-  staffPresenceTimer=setInterval(touchStaffPresence,60000);
+  staffPresenceTimer=setInterval(touchStaffPresence,20000);
 }
 
 function stopStaffPresenceHeartbeat(){
@@ -5064,10 +5066,49 @@ function openOversightDashboard(){
   startOversightAutoRefresh();
 }
 
+function queueOversightRefresh(){
+  if(oversightRefreshDebounce) clearTimeout(oversightRefreshDebounce);
+  oversightRefreshDebounce=setTimeout(()=>{
+    oversightRefreshDebounce=null;
+    refreshOversightDashboard();
+  },250);
+}
+
+function startOversightRealtime(){
+  stopOversightRealtime();
+
+  oversightRealtimeChannel=supabaseClient
+    .channel("oversight-live")
+    .on("postgres_changes",{event:"*",schema:"public",table:"tickets"},queueOversightRefresh)
+    .on("postgres_changes",{event:"*",schema:"public",table:"calls"},queueOversightRefresh)
+    .on("postgres_changes",{event:"*",schema:"public",table:"counters"},queueOversightRefresh)
+    .on("postgres_changes",{event:"*",schema:"public",table:"service_locations"},queueOversightRefresh)
+    .on("postgres_changes",{event:"*",schema:"public",table:"staff_presence"},queueOversightRefresh)
+    .subscribe((status)=>{
+      if(status==="CHANNEL_ERROR"){
+        console.warn("Oversight realtime channel error; fallback polling remains active.");
+      }
+    });
+}
+
+function stopOversightRealtime(){
+  if(oversightRealtimeChannel){
+    try{ supabaseClient.removeChannel(oversightRealtimeChannel); }catch(e){}
+    oversightRealtimeChannel=null;
+  }
+  if(oversightRefreshDebounce){
+    clearTimeout(oversightRefreshDebounce);
+    oversightRefreshDebounce=null;
+  }
+}
+
 function startOversightAutoRefresh(){
   stopOversightAutoRefresh();
   refreshOversightDashboard();
-  oversightTimer=setInterval(refreshOversightDashboard,30000);
+  startOversightRealtime();
+
+  // Safety fallback only; normal updates should arrive instantly from Realtime.
+  oversightTimer=setInterval(refreshOversightDashboard,10000);
 }
 
 function stopOversightAutoRefresh(){
@@ -5075,6 +5116,7 @@ function stopOversightAutoRefresh(){
     clearInterval(oversightTimer);
     oversightTimer=null;
   }
+  stopOversightRealtime();
 }
 
 function oversightTimeLabel(iso){
