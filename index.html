@@ -166,6 +166,25 @@
   .guided-qr-title-ar{font-size:24px;font-weight:900;margin-top:10px;color:#002856}
   .guided-qr-title-en{font-size:14px;letter-spacing:4px;margin-top:4px;color:#002856;direction:ltr}
 
+
+  .call-sound-control{
+    display:flex;justify-content:center;margin:0 auto 14px;
+  }
+  .call-sound-btn{
+    border:1px solid rgba(255,255,255,.35);
+    background:rgba(255,255,255,.12);
+    color:#fff;
+    border-radius:12px;
+    padding:9px 16px;
+    font-weight:700;
+    cursor:pointer;
+    font-family:inherit;
+  }
+  .call-sound-btn.enabled{
+    background:#fff;
+    color:#002856;
+  }
+
 </style>
 </head>
 <body>
@@ -1048,6 +1067,9 @@
         <select id="publicDisplaySelector" onchange="selectPublicDisplay(this.value)" style="width:100%;padding:10px;border-radius:10px"></select>
       </div>
       <h2 id="publicDisplayTitle">الرجاء متابعة رقم الانتظار والكاونتر</h2>
+      <div class="call-sound-control">
+        <button id="callSoundBtn" class="call-sound-btn" onclick="enableCallSound()">تفعيل صوت النداء</button>
+      </div>
       <div id="latestCall" class="called"></div>
       <div id="callHistory" class="history"></div>
     </div>
@@ -3662,6 +3684,124 @@ async function markNoShow(){
   await refreshStaff();
   renderDisplay();
 }
+
+let callAudioContext=null;
+let callSoundEnabled=false;
+let lastDisplayCallSignatureByLocation={};
+
+function currentDisplaySoundKey(){
+  return currentServiceLocation?.slug || activeDisplaySlug || "__display__";
+}
+
+function displayCallSignature(call){
+  if(!call) return "";
+  return [
+    call.ticket_number || "",
+    call.counter_number ?? "",
+    call.called_at || ""
+  ].join("|");
+}
+
+async function enableCallSound(){
+  try{
+    const AudioCtx=window.AudioContext || window.webkitAudioContext;
+    if(!AudioCtx){
+      alert("هذا المتصفح لا يدعم صوت النداء.");
+      return;
+    }
+
+    if(!callAudioContext){
+      callAudioContext=new AudioCtx();
+    }
+
+    if(callAudioContext.state==="suspended"){
+      await callAudioContext.resume();
+    }
+
+    callSoundEnabled=true;
+
+    // Establish the current call as the baseline when sound is enabled,
+    // so enabling audio does not replay an already-displayed number.
+    const key=currentDisplaySoundKey();
+    const currentLatest=window.__latestDisplayCall || null;
+    lastDisplayCallSignatureByLocation[key]=displayCallSignature(currentLatest);
+
+    const btn=document.getElementById("callSoundBtn");
+    if(btn){
+      btn.textContent="صوت النداء مفعّل";
+      btn.classList.add("enabled");
+    }
+
+    // Quiet confirmation tone that also satisfies browser interaction rules.
+    playCallChime(true);
+  }catch(err){
+    console.error("Unable to enable call sound:",err);
+    alert("تعذر تفعيل صوت النداء في هذا المتصفح.");
+  }
+}
+
+function playCallChime(confirmationOnly=false){
+  if(!callSoundEnabled || !callAudioContext) return;
+
+  try{
+    const ctx=callAudioContext;
+    const start=ctx.currentTime + 0.02;
+
+    // A short two-note notification chime; generated locally, no audio file.
+    const notes=confirmationOnly
+      ? [{f:740,t:0,d:.10,g:.06}]
+      : [
+          {f:659.25,t:0,d:.16,g:.12},
+          {f:987.77,t:.19,d:.28,g:.13}
+        ];
+
+    notes.forEach(n=>{
+      const osc=ctx.createOscillator();
+      const gain=ctx.createGain();
+
+      osc.type="sine";
+      osc.frequency.setValueAtTime(n.f,start+n.t);
+
+      gain.gain.setValueAtTime(0.0001,start+n.t);
+      gain.gain.exponentialRampToValueAtTime(n.g,start+n.t+.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001,start+n.t+n.d);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(start+n.t);
+      osc.stop(start+n.t+n.d+.03);
+    });
+  }catch(err){
+    console.warn("Call chime failed:",err);
+  }
+}
+
+function maybePlayCallSound(latest){
+  window.__latestDisplayCall=latest || null;
+
+  const key=currentDisplaySoundKey();
+  const sig=displayCallSignature(latest);
+  const previous=lastDisplayCallSignatureByLocation[key];
+
+  // First render for this screen is only a baseline. This prevents a page
+  // refresh from announcing an old call.
+  if(previous===undefined){
+    lastDisplayCallSignatureByLocation[key]=sig;
+    return;
+  }
+
+  if(sig && sig!==previous){
+    lastDisplayCallSignatureByLocation[key]=sig;
+    playCallChime(false);
+    return;
+  }
+
+  if(!sig){
+    lastDisplayCallSignatureByLocation[key]="";
+  }
+}
+
 async function renderDisplay(){
   const selector=document.getElementById("publicDisplaySelector");
   const title=document.getElementById("publicDisplayTitle");
@@ -3728,6 +3868,8 @@ async function renderDisplay(){
   const filtered=data || [];
   const latest=filtered[0];
 
+  maybePlayCallSound(latest);
+
   document.querySelectorAll(".visitor-own-ticket").forEach(el=>el.remove());
   const ownTicketNumber=visitorState?.ticket?.number || visitorState?.ticket?.ticket_number || visitorIssuedTicket?.number || visitorIssuedTicket?.ticket_number || null;
   if(ownTicketNumber){
@@ -3762,6 +3904,9 @@ function selectPublicDisplay(locationSlug){
 
   currentServiceLocation=location;
   activeDisplaySlug=location?.display_configs?.slug || null;
+
+  // The newly selected screen establishes its own call baseline.
+  window.__latestDisplayCall=null;
 
   const url=new URL(window.location.href);
 
