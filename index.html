@@ -153,6 +153,19 @@
     .oversight-summary,.oversight-metrics{grid-template-columns:1fr}
   }
 
+
+  .guided-qr-box{
+    margin-top:16px;padding:16px;border:1px solid var(--border);border-radius:16px;
+    background:#f8fafc;text-align:center
+  }
+  .guided-qr-preview{
+    width:280px;max-width:100%;margin:14px auto 8px;padding:12px;background:#fff;
+    border:1px solid var(--border);border-radius:16px;display:flex;justify-content:center
+  }
+  .guided-qr-preview svg,.guided-qr-preview canvas{max-width:100%;height:auto!important}
+  .guided-qr-title-ar{font-size:24px;font-weight:900;margin-top:10px;color:var(--primary2)}
+  .guided-qr-title-en{font-size:14px;letter-spacing:4px;margin-top:4px;color:var(--primary2);direction:ltr}
+
 </style>
 </head>
 <body>
@@ -453,7 +466,17 @@
             <div class="guided-link-card">
               <b>رابط المراجع / QR</b>
               <code id="guidedVisitorLink"></code>
-              <button class="btn primary" onclick="guidedCopyLink('visitor')">نسخ رابط المراجع / QR</button>
+              <div class="actions" style="margin-top:10px">
+                <button class="btn" onclick="guidedCopyLink('visitor')">نسخ الرابط</button>
+                <button class="btn primary" onclick="guidedPrintQr()">طباعة QR</button>
+              </div>
+
+              <div class="guided-qr-box">
+                <div class="muted">معاينة لوحة QR</div>
+                <div id="guidedQrPreview" class="guided-qr-preview"></div>
+                <div id="guidedQrTitleAr" class="guided-qr-title-ar"></div>
+                <div id="guidedQrTitleEn" class="guided-qr-title-en"></div>
+              </div>
             </div>
             <div class="guided-link-card">
               <b>رابط شاشة النداء</b>
@@ -1031,6 +1054,7 @@
   </section>
 </main>
 
+<script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.6.0/lib/qr-code-styling.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
 // Refresh central staff permissions automatically so superuser changes
 // take effect without requiring logout/login.
@@ -2403,6 +2427,208 @@ function guidedScreenUrl(){
   return u.toString();
 }
 
+
+let guidedQrInstance=null;
+
+function kuLogoDataUri(){
+  return document.querySelector(".logo img")?.src || "";
+}
+
+function guidedQrDepartmentRow(){
+  const selected=(guidedSetup.departments || [])
+    .map(slug=>(departmentCatalog || []).find(d=>d.slug===slug))
+    .filter(Boolean);
+
+  return selected.length===1 ? selected[0] : null;
+}
+
+function guidedQrLabels(){
+  const locationName=String(guidedSetup.locationName || "").replace(/^شاشة\s+/,"").trim();
+  const dept=guidedQrDepartmentRow();
+
+  // Named offices/service points should print their own configured name.
+  // Generic halls should print the configured department name.
+  const isGenericHall=/^صالة\s*[0-9٠-٩]+$/i.test(locationName) ||
+                      /^hall\s*[0-9]+$/i.test(locationName);
+
+  let ar=isGenericHall && dept ? dept.name : (locationName || dept?.name || "موقع الخدمة");
+  ar=String(ar).replace(/^إدارة\s+/,"").trim();
+
+  const byLocation={
+    "الاستقبال":"RECEPTION",
+    "مكتب العميد":"DEAN'S OFFICE",
+    "القبول":"ADMISSIONS",
+    "التسجيل":"REGISTRATION",
+    "السجلات":"RECORDS",
+    "الخريجين":"GRADUATES"
+  };
+
+  const byDepartment={
+    "admissions":"ADMISSIONS",
+    "registration":"REGISTRATION",
+    "records":"RECORDS",
+    "graduates":"GRADUATES",
+    "independent":"SERVICES"
+  };
+
+  let en=byLocation[ar] || (dept ? byDepartment[dept.slug] : "") || "";
+
+  // Useful fallback for named reception/dean locations whose Arabic name
+  // is configured at the location level.
+  if(!en && locationName==="الاستقبال") en="RECEPTION";
+  if(!en && locationName==="مكتب العميد") en="DEAN'S OFFICE";
+
+  // For a custom department with no known English mapping, keep the Arabic
+  // configured title and use a neutral English descriptor.
+  if(!en) en="SERVICE POINT";
+
+  return {ar,en};
+}
+
+function guidedRenderQr(){
+  const box=document.getElementById("guidedQrPreview");
+  if(!box) return;
+
+  const labels=guidedQrLabels();
+  document.getElementById("guidedQrTitleAr").textContent=labels.ar;
+  document.getElementById("guidedQrTitleEn").textContent=labels.en;
+
+  box.innerHTML="";
+
+  if(typeof QRCodeStyling==="undefined"){
+    box.innerHTML='<div class="notice">تعذر تحميل مولد QR. تحقق من الاتصال بالإنترنت ثم أعد تحميل الصفحة.</div>';
+    guidedQrInstance=null;
+    return;
+  }
+
+  guidedQrInstance=new QRCodeStyling({
+    width:280,
+    height:280,
+    type:"svg",
+    data:guidedVisitorUrl(),
+    image:kuLogoDataUri(),
+    margin:8,
+    qrOptions:{
+      errorCorrectionLevel:"H"
+    },
+    dotsOptions:{
+      color:"#0f4c81",
+      type:"dots"
+    },
+    cornersSquareOptions:{
+      color:"#0f4c81",
+      type:"square"
+    },
+    cornersDotOptions:{
+      color:"#0f4c81",
+      type:"square"
+    },
+    backgroundOptions:{
+      color:"#ffffff"
+    },
+    imageOptions:{
+      hideBackgroundDots:true,
+      imageSize:0.18,
+      margin:7,
+      crossOrigin:"anonymous"
+    }
+  });
+
+  guidedQrInstance.append(box);
+}
+
+function blobToDataUrl(blob){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function guidedPrintQr(){
+  const printWindow=window.open("","_blank");
+  if(!printWindow){
+    alert("تعذر فتح نافذة الطباعة. يرجى السماح بالنوافذ المنبثقة لهذا الموقع.");
+    return;
+  }
+
+  if(!guidedQrInstance){
+    guidedRenderQr();
+  }
+
+  if(!guidedQrInstance){
+    printWindow.close();
+    alert("تعذر إنشاء رمز QR.");
+    return;
+  }
+
+  try{
+    const blob=await guidedQrInstance.getRawData("png");
+    const qrData=await blobToDataUrl(blob);
+    const labels=guidedQrLabels();
+
+    printWindow.document.open();
+    printWindow.document.write(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>${labels.ar} - QR</title>
+<style>
+  @page{size:A4 portrait;margin:0}
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#fff}
+  body{font-family:Tahoma,Arial,sans-serif;color:#08366a}
+  .sheet{
+    width:210mm;min-height:297mm;margin:0 auto;padding:20mm 18mm 18mm;
+    display:flex;flex-direction:column;align-items:center;text-align:center;
+  }
+  .qr{width:142mm;height:142mm;object-fit:contain;display:block}
+  .ar{
+    margin-top:12mm;font-size:27mm;line-height:1;font-weight:900;
+    color:#08366a;white-space:nowrap
+  }
+  .rule{width:28mm;border-top:1.3mm solid #08366a;margin:7mm 0 6mm}
+  .en{
+    font-family:Arial,sans-serif;font-size:11mm;letter-spacing:5mm;
+    font-weight:400;color:#08366a;direction:ltr;white-space:nowrap
+  }
+  .rule.small{width:27mm;margin:7mm 0 7mm}
+  .instruction-ar{
+    font-size:6.8mm;font-weight:400;line-height:1.5;color:#08366a
+  }
+  .instruction-en{
+    margin-top:3mm;font-family:Arial,sans-serif;font-size:4.3mm;
+    letter-spacing:.25mm;color:#08366a;direction:ltr
+  }
+  @media print{
+    .sheet{page-break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+  <div class="sheet">
+    <img class="qr" src="${qrData}" alt="QR">
+    <div class="ar">${labels.ar}</div>
+    <div class="rule"></div>
+    <div class="en">${labels.en}</div>
+    <div class="rule small"></div>
+    <div class="instruction-ar">امسح الرمز للحصول على رقم انتظار</div>
+    <div class="instruction-en">SCAN THE QR CODE TO GET YOUR QUEUE NUMBER</div>
+  </div>
+<script>
+  window.addEventListener("load",()=>setTimeout(()=>window.print(),250));
+<\/script>
+</body>
+</html>`);
+    printWindow.document.close();
+  }catch(err){
+    console.error("QR print generation failed:",err);
+    printWindow.close();
+    alert("تعذر تجهيز لوحة QR للطباعة.");
+  }
+}
+
 function guidedRenderFinish(){
   const creds=guidedSetup.createdCredentials||[];
 
@@ -2426,6 +2652,7 @@ function guidedRenderFinish(){
 
   document.getElementById("guidedVisitorLink").textContent=guidedVisitorUrl();
   document.getElementById("guidedScreenLink").textContent=guidedScreenUrl();
+  guidedRenderQr();
 }
 
 async function guidedCopyLink(type){
