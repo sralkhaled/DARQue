@@ -162,9 +162,9 @@
     width:280px;max-width:100%;margin:14px auto 8px;padding:12px;background:#fff;
     border:1px solid var(--border);border-radius:16px;display:flex;justify-content:center
   }
-  .guided-qr-preview svg,.guided-qr-preview canvas{max-width:100%;height:auto!important}
-  .guided-qr-title-ar{font-size:24px;font-weight:900;margin-top:10px;color:var(--primary2)}
-  .guided-qr-title-en{font-size:14px;letter-spacing:4px;margin-top:4px;color:var(--primary2);direction:ltr}
+  .guided-qr-preview svg,.guided-qr-preview canvas{width:100%!important;max-width:256px!important;height:auto!important}
+  .guided-qr-title-ar{font-size:24px;font-weight:900;margin-top:10px;color:#002856}
+  .guided-qr-title-en{font-size:14px;letter-spacing:4px;margin-top:4px;color:#002856;direction:ltr}
 
 </style>
 </head>
@@ -1054,7 +1054,7 @@
   </section>
 </main>
 
-<script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.6.0/lib/qr-code-styling.js"></script>
+<script src="https://unpkg.com/qr-code-styling@1.6.0/lib/qr-code-styling.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
 // Refresh central staff permissions automatically so superuser changes
 // take effect without requiring logout/login.
@@ -2502,34 +2502,39 @@ function guidedRenderQr(){
   }
 
   guidedQrInstance=new QRCodeStyling({
-    width:280,
-    height:280,
+    width:1000,
+    height:1000,
     type:"svg",
     data:guidedVisitorUrl(),
     image:kuLogoDataUri(),
-    margin:8,
+
     qrOptions:{
       errorCorrectionLevel:"H"
     },
+
     dotsOptions:{
-      color:"#0f4c81",
-      type:"dots"
+      type:"dots",
+      color:"#002856"
     },
+
     cornersSquareOptions:{
-      color:"#0f4c81",
-      type:"square"
+      type:"square",
+      color:"#002856"
     },
+
     cornersDotOptions:{
-      color:"#0f4c81",
-      type:"square"
+      type:"square",
+      color:"#002856"
     },
+
     backgroundOptions:{
-      color:"#ffffff"
+      color:"#FFFFFF"
     },
+
     imageOptions:{
       hideBackgroundDots:true,
-      imageSize:0.18,
-      margin:7,
+      imageSize:0.28,
+      margin:8,
       crossOrigin:"anonymous"
     }
   });
@@ -2564,7 +2569,7 @@ async function guidedPrintQr(){
   }
 
   try{
-    const blob=await guidedQrInstance.getRawData("png");
+    const blob=await guidedQrInstance.getRawData("svg");
     const qrData=await blobToDataUrl(blob);
     const labels=guidedQrLabels();
 
@@ -2580,26 +2585,26 @@ async function guidedPrintQr(){
   html,body{margin:0;padding:0;background:#fff}
   body{font-family:Tahoma,Arial,sans-serif;color:#08366a}
   .sheet{
-    width:210mm;min-height:297mm;margin:0 auto;padding:20mm 18mm 18mm;
+    width:210mm;min-height:297mm;margin:0 auto;padding:17mm 18mm 14mm;
     display:flex;flex-direction:column;align-items:center;text-align:center;
   }
-  .qr{width:142mm;height:142mm;object-fit:contain;display:block}
+  .qr{width:137mm;height:137mm;object-fit:contain;display:block}
   .ar{
-    margin-top:12mm;font-size:27mm;line-height:1;font-weight:900;
-    color:#08366a;white-space:nowrap
+    margin-top:9mm;font-size:22mm;line-height:1.05;font-weight:800;
+    color:#002856;white-space:nowrap
   }
-  .rule{width:28mm;border-top:1.3mm solid #08366a;margin:7mm 0 6mm}
+  .rule{width:28mm;border-top:.75mm solid #002856;margin:6mm 0 5mm}
   .en{
-    font-family:Arial,sans-serif;font-size:11mm;letter-spacing:5mm;
-    font-weight:400;color:#08366a;direction:ltr;white-space:nowrap
+    font-family:Arial,sans-serif;font-size:9.3mm;letter-spacing:4.2mm;
+    font-weight:400;color:#002856;direction:ltr;white-space:nowrap
   }
-  .rule.small{width:27mm;margin:7mm 0 7mm}
+  .rule.small{width:27mm;margin:6mm 0 7mm}
   .instruction-ar{
-    font-size:6.8mm;font-weight:400;line-height:1.5;color:#08366a
+    font-size:5.8mm;font-weight:400;line-height:1.45;color:#002856
   }
   .instruction-en{
-    margin-top:3mm;font-family:Arial,sans-serif;font-size:4.3mm;
-    letter-spacing:.25mm;color:#08366a;direction:ltr
+    margin-top:2.4mm;font-family:Arial,sans-serif;font-size:3.7mm;
+    letter-spacing:.18mm;color:#002856;direction:ltr
   }
   @media print{
     .sheet{page-break-inside:avoid}
