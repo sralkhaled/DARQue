@@ -3935,11 +3935,15 @@ async function renderDisplay(){
       noLocationDepartments ? "لم يتم تحديد إدارات لهذا الموقع" : "بانتظار أول نداء"
     }</div></div>`;
   }else{
-    const destination=latest.counter_number ? `كاونتر ${latest.counter_number}` : (currentServiceLocation?.name || cfg.name).replace(/^شاشة\s+/,"");
-    const destinationClass=latest.counter_number ? "c counter-destination" : "c";
+    const isCounterDestination=!!latest.counter_number;
+    const destination=isCounterDestination
+      ? String(latest.counter_number)
+      : (currentServiceLocation?.name || cfg.name).replace(/^شاشة\s+/,"");
+    const destinationClass=isCounterDestination ? "c counter-destination" : "c";
+    const destinationLabel=isCounterDestination ? "يرجى التوجه إلى كاونتر" : "يرجى التوجه إلى";
     latestBox.innerHTML=`
       <div class="call-card"><div class="muted">رقم الانتظار</div><div class="n">${latest.ticket_number}</div></div>
-      <div class="call-card"><div class="muted">يرجى التوجه إلى</div><div class="${destinationClass}">${destination}</div></div>`;
+      <div class="call-card"><div class="muted">${destinationLabel}</div><div class="${destinationClass}">${destination}</div></div>`;
   }
 
   historyBox.innerHTML=filtered.slice(1).map(c=>{
@@ -4654,11 +4658,15 @@ async function renderVisitorWaiting(){
   if(!latest){
     if(latestBox) latestBox.innerHTML=`<div class="call-card" style="grid-column:1/-1"><div class="muted">بانتظار أول نداء</div></div>`;
   }else{
-    const destination=visitorDestinationLabel(latest,cfg);
-    const destinationClass=latest.counter_number ? "c counter-destination" : "c";
+    const isCounterDestination=!!latest.counter_number;
+    const destination=isCounterDestination
+      ? String(latest.counter_number)
+      : visitorDestinationLabel(latest,cfg);
+    const destinationClass=isCounterDestination ? "c counter-destination" : "c";
+    const destinationLabel=isCounterDestination ? "يرجى التوجه إلى كاونتر" : "يرجى التوجه إلى";
     if(latestBox) latestBox.innerHTML=`
       <div class="call-card"><div class="muted">رقم الانتظار</div><div class="n">${latest.ticket_number}</div></div>
-      <div class="call-card"><div class="muted">يرجى التوجه إلى</div><div class="${destinationClass}">${destination}</div></div>`;
+      <div class="call-card"><div class="muted">${destinationLabel}</div><div class="${destinationClass}">${destination}</div></div>`;
   }
 
   if(historyBox){
