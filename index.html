@@ -94,10 +94,17 @@
   .check input{margin-left:7px}
   .display-board{background:#0b1730;color:#fff;min-height:70vh;border-radius:26px;padding:28px}
   .display-board h2{text-align:center;margin-top:0;font-size:30px}
-  .called{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-  .call-card{background:#fff;color:#111827;border-radius:20px;padding:24px;text-align:center}
-  .call-card .n{font-size:56px;font-weight:800;color:var(--primary)}
-  .call-card .c{font-size:26px;font-weight:700}
+  .called{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;width:100%}
+  .call-card{background:#fff;color:#111827;border-radius:20px;padding:24px;text-align:center;min-width:0;overflow:hidden}
+  .call-card .n{font-size:56px;font-weight:800;color:var(--primary);line-height:1.05;white-space:nowrap}
+  .call-card .c{font-size:26px;font-weight:700;line-height:1.25;overflow-wrap:anywhere}
+  .call-card .c.counter-destination{
+    font-size:56px;
+    font-weight:800;
+    color:var(--primary);
+    line-height:1.05;
+    white-space:nowrap;
+  }
   .history{margin-top:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
   .hist{background:rgba(255,255,255,.08);padding:14px;border-radius:14px;text-align:center}
   .visitor-waiting-board{background:#0b1730;color:#fff;min-height:70vh;border-radius:26px;padding:26px}
@@ -108,7 +115,35 @@
   .visitor-own-card .place{font-size:18px;font-weight:700;color:var(--muted)}
   .visitor-live-side{min-width:0}
   .visitor-live-side h2{text-align:center;margin-top:0;font-size:30px}
-  @media(max-width:760px){.visitor-waiting-grid{grid-template-columns:1fr}.visitor-own-card{min-height:auto;padding:20px}.visitor-own-card .num{font-size:54px}}
+  @media(max-width:760px){
+    main{padding-left:12px;padding-right:12px}
+    .visitor-waiting-board,.display-board{padding:18px;border-radius:22px}
+    .visitor-waiting-grid{grid-template-columns:minmax(0,1fr);gap:18px}
+    .visitor-own-card{min-height:auto;padding:20px 14px}
+    .visitor-own-card .num{font-size:clamp(46px,15vw,62px)}
+    .visitor-live-side{width:100%;min-width:0}
+    .visitor-live-side h2,.display-board h2{font-size:clamp(25px,8vw,32px)}
+    .called{gap:10px}
+    .call-card{padding:18px 10px;border-radius:18px}
+    .call-card .n{font-size:clamp(42px,14vw,58px)}
+    .call-card .c{font-size:clamp(20px,7vw,28px)}
+    .call-card .c.counter-destination{font-size:clamp(42px,14vw,58px)}
+    .history{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .hist{min-width:0;padding:12px 8px}
+  }
+  @media(max-width:390px){
+    main{padding-left:8px;padding-right:8px}
+    .visitor-waiting-board,.display-board{padding:14px;border-radius:18px}
+    .called{gap:8px}
+    .call-card{padding:16px 7px;border-radius:16px}
+    .call-card .n{font-size:clamp(38px,13.5vw,52px);letter-spacing:-1px}
+    .call-card .c{font-size:clamp(18px,6.5vw,24px)}
+    .call-card .c.counter-destination{font-size:clamp(38px,13.5vw,52px);letter-spacing:-1px}
+    .visitor-own-card{padding:18px 10px}
+    .visitor-own-card .label{font-size:18px}
+    .visitor-own-card .place{font-size:16px}
+    .visitor-own-card .num{font-size:clamp(44px,15vw,56px)}
+  }
 
   .guided-shell{max-width:980px;margin:0 auto}
   .guided-progress{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
@@ -3747,30 +3782,45 @@ function playCallChime(confirmationOnly=false){
     const ctx=callAudioContext;
     const start=ctx.currentTime + 0.02;
 
-    // A short two-note notification chime; generated locally, no audio file.
+    // Louder, fuller call chime. The main alert uses two short two-note bursts.
+    // This is still generated locally; no audio file is required.
     const notes=confirmationOnly
-      ? [{f:740,t:0,d:.10,g:.06}]
+      ? [
+          {f:784.00,t:0.00,d:.13,g:.16,type:"triangle"}
+        ]
       : [
-          {f:659.25,t:0,d:.16,g:.12},
-          {f:987.77,t:.19,d:.28,g:.13}
+          {f:659.25,t:0.00,d:.20,g:.42,type:"triangle"},
+          {f:987.77,t:0.18,d:.32,g:.46,type:"triangle"},
+          {f:659.25,t:0.70,d:.20,g:.42,type:"triangle"},
+          {f:987.77,t:0.88,d:.38,g:.48,type:"triangle"}
         ];
+
+    // Master compressor helps the sound remain strong without harsh clipping.
+    const compressor=ctx.createDynamicsCompressor();
+    compressor.threshold.setValueAtTime(-18,start);
+    compressor.knee.setValueAtTime(12,start);
+    compressor.ratio.setValueAtTime(4,start);
+    compressor.attack.setValueAtTime(.003,start);
+    compressor.release.setValueAtTime(.18,start);
+    compressor.connect(ctx.destination);
 
     notes.forEach(n=>{
       const osc=ctx.createOscillator();
       const gain=ctx.createGain();
 
-      osc.type="sine";
+      osc.type=n.type || "triangle";
       osc.frequency.setValueAtTime(n.f,start+n.t);
 
       gain.gain.setValueAtTime(0.0001,start+n.t);
-      gain.gain.exponentialRampToValueAtTime(n.g,start+n.t+.02);
+      gain.gain.exponentialRampToValueAtTime(n.g,start+n.t+.018);
+      gain.gain.setValueAtTime(n.g,start+n.t+Math.max(.02,n.d-.06));
       gain.gain.exponentialRampToValueAtTime(0.0001,start+n.t+n.d);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(compressor);
 
       osc.start(start+n.t);
-      osc.stop(start+n.t+n.d+.03);
+      osc.stop(start+n.t+n.d+.04);
     });
   }catch(err){
     console.warn("Call chime failed:",err);
@@ -3886,9 +3936,10 @@ async function renderDisplay(){
     }</div></div>`;
   }else{
     const destination=latest.counter_number ? `كاونتر ${latest.counter_number}` : (currentServiceLocation?.name || cfg.name).replace(/^شاشة\s+/,"");
+    const destinationClass=latest.counter_number ? "c counter-destination" : "c";
     latestBox.innerHTML=`
       <div class="call-card"><div class="muted">رقم الانتظار</div><div class="n">${latest.ticket_number}</div></div>
-      <div class="call-card"><div class="muted">يرجى التوجه إلى</div><div class="c">${destination}</div></div>`;
+      <div class="call-card"><div class="muted">يرجى التوجه إلى</div><div class="${destinationClass}">${destination}</div></div>`;
   }
 
   historyBox.innerHTML=filtered.slice(1).map(c=>{
@@ -4604,9 +4655,10 @@ async function renderVisitorWaiting(){
     if(latestBox) latestBox.innerHTML=`<div class="call-card" style="grid-column:1/-1"><div class="muted">بانتظار أول نداء</div></div>`;
   }else{
     const destination=visitorDestinationLabel(latest,cfg);
+    const destinationClass=latest.counter_number ? "c counter-destination" : "c";
     if(latestBox) latestBox.innerHTML=`
       <div class="call-card"><div class="muted">رقم الانتظار</div><div class="n">${latest.ticket_number}</div></div>
-      <div class="call-card"><div class="muted">يرجى التوجه إلى</div><div class="c">${destination}</div></div>`;
+      <div class="call-card"><div class="muted">يرجى التوجه إلى</div><div class="${destinationClass}">${destination}</div></div>`;
   }
 
   if(historyBox){
