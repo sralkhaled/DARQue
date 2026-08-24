@@ -4144,36 +4144,40 @@ function maybePlayCallSound(callRows){
   const rows=Array.isArray(callRows) ? callRows : [];
   const key=currentDisplaySoundKey();
 
-  // Sound is driven ONLY by the newest actual call-event timestamp.
-  // Row order/status changes (completion, no-show, history reorder) are irrelevant.
-  const timestamps=rows
-    .map(r=>r?.called_at ? String(r.called_at) : "")
-    .filter(Boolean)
-    .sort();
+  if(!window.__seenDisplayCallEvents){
+    window.__seenDisplayCallEvents={};
+  }
+  if(!window.__seenDisplayCallEvents[key]){
+    window.__seenDisplayCallEvents[key]=new Set();
+  }
 
-  const newest=timestamps.length ? timestamps[timestamps.length-1] : "";
-  const previous=lastDisplayCallSignatureByLocation[key];
+  const seen=window.__seenDisplayCallEvents[key];
 
-  // First render establishes a baseline and never announces an old call.
-  if(previous===undefined){
-    lastDisplayCallSignatureByLocation[key]=newest;
+  const events=rows
+    .filter(r=>r?.call_id!==null && r?.call_id!==undefined)
+    .map(r=>({
+      id:String(r.call_id),
+      called_at:r.called_at ? String(r.called_at) : ""
+    }))
+    .sort((a,b)=>a.called_at.localeCompare(b.called_at));
+
+  // First render is baseline only: do not replay old calls on refresh.
+  if(!seen.size){
+    events.forEach(e=>seen.add(e.id));
     return;
   }
 
-  // Only a strictly newer call timestamp can chime.
-  // If rows disappear/reorder after completion/no-show, newest will be
-  // unchanged or older, therefore silent.
-  if(newest && (!previous || newest>previous)){
-    lastDisplayCallSignatureByLocation[key]=newest;
-    playCallChime(false);
-    return;
-  }
+  const unseen=events.filter(e=>!seen.has(e.id));
 
-  // Preserve the highest timestamp ever seen for this display.
-  // Never move the baseline backwards when rows disappear.
-  if(newest && (!previous || newest>previous)){
-    lastDisplayCallSignatureByLocation[key]=newest;
-  }
+  // Mark first, then announce. This prevents duplicate chimes if another
+  // refresh arrives while the queued sounds are still playing.
+  unseen.forEach(e=>seen.add(e.id));
+
+  // One chime for every genuine new call event (التالي or إعادة النداء).
+  // Space them so simultaneous counter calls remain audibly distinct.
+  unseen.forEach((e,i)=>{
+    setTimeout(()=>playCallChime(false), i*1100);
+  });
 }
 
 async function renderDisplay(){
@@ -4240,7 +4244,10 @@ async function renderDisplay(){
   }
 
   const filtered=data || [];
-  const latest=filtered[0];
+
+  // The large white call area must show ONLY the currently active call.
+  // Historical calls remain available for the smaller cards below.
+  const latest=filtered.find(r=>r?.is_active===true) || null;
 
   maybePlayCallSound(filtered);
 
@@ -4270,7 +4277,7 @@ async function renderDisplay(){
       <div class="call-card"><div class="muted">${destinationLabel}</div><div class="${destinationClass}">${destination}</div></div>`;
   }
 
-  historyBox.innerHTML=filtered.slice(1).map(c=>{
+  historyBox.innerHTML=filtered.filter(c=>c!==latest).map(c=>{
     const destination=c.counter_number ? `كاونتر ${c.counter_number}` : (currentServiceLocation?.name || cfg.name).replace(/^شاشة\s+/,"");
     return `<div class="hist"><b style="font-size:26px">${c.ticket_number}</b><div>${destination}</div></div>`;
   }).join("");
