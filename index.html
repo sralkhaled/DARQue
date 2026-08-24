@@ -917,6 +917,7 @@
         <div id="serviceAdminMessage" class="notice hidden"></div>
         <div class="actions">
           <button id="saveServiceBtn" class="btn primary" onclick="saveNewService()">إضافة الخدمة</button>
+          <button id="cancelServiceEditBtn" class="btn hidden" onclick="cancelServiceEdit()">إلغاء التعديل</button>
         </div>
 
         <div style="overflow:auto;margin-top:16px">
@@ -5043,10 +5044,25 @@ function serviceRouteRule(dept,section){
   return {college:false,letter:false,locked:true};
 }
 
+let editingServiceId=null;
+
 async function openServiceManagement(){
   await loadDepartmentCatalog();
   hideAdminSubpanels("serviceManagementPanel");
   document.getElementById("serviceManagementPanel").classList.remove("hidden");
+
+  const deptSelect=document.getElementById("svcDept");
+  const currentDept=deptSelect.value;
+  deptSelect.innerHTML=`<option value="">اختر الإدارة</option>`+
+    (departmentCatalog || [])
+      .filter(d=>d.active)
+      .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0) || String(a.name||"").localeCompare(String(b.name||"")))
+      .map(d=>`<option value="${d.slug}">${d.name}</option>`)
+      .join("");
+  if(currentDept && [...deptSelect.options].some(o=>o.value===currentDept)){
+    deptSelect.value=currentDept;
+  }
+
   await loadServiceCatalog();
   renderServiceAdminTable();
   serviceAdminRouteChanged();
@@ -5054,6 +5070,7 @@ async function openServiceManagement(){
 }
 
 function closeServiceManagement(){
+  cancelServiceEdit(true);
   document.getElementById("serviceManagementPanel").classList.add("hidden");
 }
 
@@ -5118,10 +5135,77 @@ function renderServiceAdminTable(){
         <span class="tag" style="${s.active?"":"background:#fff1f2;color:#b42318"}">${s.active?"نشطة":"موقوفة"}</span>
       </td>
       <td style="padding:10px;border-bottom:1px solid var(--border)">
-        <button class="btn" style="padding:7px 10px" onclick="toggleServiceActive(${s.id},${s.active?"false":"true"})">${s.active?"إيقاف":"تفعيل"}</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn" style="padding:7px 10px" onclick="editServiceCatalogItem(${s.id})">تعديل</button>
+          <button class="btn" style="padding:7px 10px" onclick="toggleServiceActive(${s.id},${s.active?"false":"true"})">${s.active?"إيقاف":"تفعيل"}</button>
+        </div>
       </td>
     </tr>
   `).join("");
+}
+
+
+function resetServiceAdminForm(){
+  editingServiceId=null;
+  document.getElementById("svcDept").value="";
+  document.getElementById("svcSection").value="";
+  document.getElementById("svcName").value="";
+  document.getElementById("svcPrefix").value="";
+  document.getElementById("svcSort").value="100";
+  document.getElementById("svcCollege").checked=false;
+  document.getElementById("svcLetter").checked=false;
+  document.getElementById("saveServiceBtn").textContent="إضافة الخدمة";
+  document.getElementById("cancelServiceEditBtn").classList.add("hidden");
+  serviceAdminRouteChanged();
+}
+
+function cancelServiceEdit(silent=false){
+  resetServiceAdminForm();
+  const msg=document.getElementById("serviceAdminMessage");
+  if(!silent){
+    msg.textContent="تم إلغاء التعديل.";
+    msg.classList.remove("hidden");
+  }else{
+    msg.classList.add("hidden");
+  }
+}
+
+function editServiceCatalogItem(id){
+  const s=(serviceCatalog || []).find(x=>Number(x.id)===Number(id));
+  if(!s) return;
+
+  editingServiceId=Number(s.id);
+
+  const deptSelect=document.getElementById("svcDept");
+  if(![...deptSelect.options].some(o=>o.value===s.department)){
+    const dept=(departmentCatalog || []).find(d=>d.slug===s.department);
+    if(dept){
+      deptSelect.add(new Option(dept.name,dept.slug));
+    }
+  }
+
+  deptSelect.value=s.department;
+  document.getElementById("svcSection").value=s.section || "";
+  document.getElementById("svcName").value=s.service_name || "";
+  document.getElementById("svcPrefix").value=s.ticket_prefix || "";
+  document.getElementById("svcSort").value=Number(s.sort_order ?? 100);
+
+  serviceAdminRouteChanged();
+
+  // Restore the stored flags after route controls have been configured.
+  const college=document.getElementById("svcCollege");
+  const letter=document.getElementById("svcLetter");
+  if(!college.disabled) college.checked=!!s.requires_college;
+  if(!letter.disabled) letter.checked=!!s.requires_letter;
+
+  document.getElementById("saveServiceBtn").textContent="حفظ التعديل";
+  document.getElementById("cancelServiceEditBtn").classList.remove("hidden");
+
+  const msg=document.getElementById("serviceAdminMessage");
+  msg.textContent=`تعديل الخدمة: ${s.service_name}`;
+  msg.classList.remove("hidden");
+
+  document.getElementById("serviceManagementPanel").scrollIntoView({behavior:"smooth",block:"start"});
 }
 
 async function saveNewService(){
@@ -5148,7 +5232,56 @@ async function saveNewService(){
   const requires_college = dept==="records"
     ? document.getElementById("svcCollege").checked
     : !!rule.college;
-  const requires_letter = !!rule.letter;
+  const requires_letter = rule.locked
+    ? !!rule.letter
+    : document.getElementById("svcLetter").checked;
+
+  if(editingServiceId){
+    const previous=(serviceCatalog || []).find(x=>Number(x.id)===Number(editingServiceId));
+    if(!previous){
+      msg.textContent="تعذر العثور على الخدمة المراد تعديلها.";
+      msg.classList.remove("hidden");
+      return;
+    }
+
+    const routeChanged=
+      previous.department!==dept ||
+      String(previous.section||"")!==String(section||"");
+
+    if(routeChanged){
+      const ok=confirm(
+        "سيتم تغيير مسار هذه الخدمة، وسيتم تحديث صلاحيات الموظفين المرتبطة بها تلقائياً. هل تريد المتابعة؟"
+      );
+      if(!ok) return;
+    }
+
+    const {data,error}=await supabaseClient.rpc("update_service_catalog_item",{
+      p_service_id:Number(editingServiceId),
+      p_department:dept,
+      p_section:section || null,
+      p_service_name:service_name,
+      p_requires_college:requires_college,
+      p_requires_letter:requires_letter,
+      p_ticket_prefix:dept==="independent" ? ticket_prefix : null,
+      p_sort_order:sort_order
+    });
+
+    if(error){
+      console.error("Service update failed:",error);
+      msg.textContent=String(error.message||"").includes("duplicate key")
+        ? "توجد خدمة أخرى بالاسم نفسه في المسار المحدد."
+        : `تعذر تعديل الخدمة: ${error.message}`;
+      msg.classList.remove("hidden");
+      return;
+    }
+
+    msg.textContent="تم تعديل الخدمة بنجاح.";
+    msg.classList.remove("hidden");
+    resetServiceAdminForm();
+    await loadServiceCatalog();
+    renderServiceAdminTable();
+    return;
+  }
 
   const { error } = await supabaseClient.from("service_catalog").insert({
     department:dept,
@@ -5170,8 +5303,7 @@ async function saveNewService(){
 
   msg.textContent="تمت إضافة الخدمة بنجاح.";
   msg.classList.remove("hidden");
-  document.getElementById("svcName").value="";
-  document.getElementById("svcPrefix").value="";
+  resetServiceAdminForm();
   await loadServiceCatalog();
   renderServiceAdminTable();
 }
