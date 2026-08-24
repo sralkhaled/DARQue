@@ -4047,11 +4047,7 @@ function currentDisplaySoundKey(){
 
 function displayCallSignature(call){
   if(!call || !call.called_at) return "";
-  return [
-    call.ticket_number || "",
-    call.counter_number ?? "",
-    call.called_at
-  ].join("|");
+  return String(call.called_at);
 }
 
 async function enableCallSound(){
@@ -4144,31 +4140,40 @@ function playCallChime(confirmationOnly=false){
   }
 }
 
-function maybePlayCallSound(latest){
-  window.__latestDisplayCall=latest || null;
-
+function maybePlayCallSound(callRows){
+  const rows=Array.isArray(callRows) ? callRows : [];
   const key=currentDisplaySoundKey();
-  const sig=displayCallSignature(latest);
+
+  // Sound is driven ONLY by the newest actual call-event timestamp.
+  // Row order/status changes (completion, no-show, history reorder) are irrelevant.
+  const timestamps=rows
+    .map(r=>r?.called_at ? String(r.called_at) : "")
+    .filter(Boolean)
+    .sort();
+
+  const newest=timestamps.length ? timestamps[timestamps.length-1] : "";
   const previous=lastDisplayCallSignatureByLocation[key];
 
-  // First render establishes a baseline only. This prevents a refresh
-  // from replaying the most recent call.
+  // First render establishes a baseline and never announces an old call.
   if(previous===undefined){
-    lastDisplayCallSignatureByLocation[key]=sig;
+    lastDisplayCallSignatureByLocation[key]=newest;
     return;
   }
 
-  // A call or recall produces a new called_at value. Only that kind of
-  // new call-event should trigger the chime.
-  if(sig && sig!==previous){
-    lastDisplayCallSignatureByLocation[key]=sig;
+  // Only a strictly newer call timestamp can chime.
+  // If rows disappear/reorder after completion/no-show, newest will be
+  // unchanged or older, therefore silent.
+  if(newest && (!previous || newest>previous)){
+    lastDisplayCallSignatureByLocation[key]=newest;
     playCallChime(false);
     return;
   }
 
-  // IMPORTANT: if the latest call disappears because the ticket was
-  // completed/no-show, do NOT clear the baseline. Otherwise the next
-  // display reorder could be mistaken for a new call.
+  // Preserve the highest timestamp ever seen for this display.
+  // Never move the baseline backwards when rows disappear.
+  if(newest && (!previous || newest>previous)){
+    lastDisplayCallSignatureByLocation[key]=newest;
+  }
 }
 
 async function renderDisplay(){
@@ -4237,7 +4242,7 @@ async function renderDisplay(){
   const filtered=data || [];
   const latest=filtered[0];
 
-  maybePlayCallSound(latest);
+  maybePlayCallSound(filtered);
 
   document.querySelectorAll(".visitor-own-ticket").forEach(el=>el.remove());
   const ownTicketNumber=visitorState?.ticket?.number || visitorState?.ticket?.ticket_number || visitorIssuedTicket?.number || visitorIssuedTicket?.ticket_number || null;
