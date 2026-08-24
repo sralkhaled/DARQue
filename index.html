@@ -4046,11 +4046,11 @@ function currentDisplaySoundKey(){
 }
 
 function displayCallSignature(call){
-  if(!call) return "";
+  if(!call || !call.called_at) return "";
   return [
     call.ticket_number || "",
     call.counter_number ?? "",
-    call.called_at || ""
+    call.called_at
   ].join("|");
 }
 
@@ -4151,22 +4151,24 @@ function maybePlayCallSound(latest){
   const sig=displayCallSignature(latest);
   const previous=lastDisplayCallSignatureByLocation[key];
 
-  // First render for this screen is only a baseline. This prevents a page
-  // refresh from announcing an old call.
+  // First render establishes a baseline only. This prevents a refresh
+  // from replaying the most recent call.
   if(previous===undefined){
     lastDisplayCallSignatureByLocation[key]=sig;
     return;
   }
 
+  // A call or recall produces a new called_at value. Only that kind of
+  // new call-event should trigger the chime.
   if(sig && sig!==previous){
     lastDisplayCallSignatureByLocation[key]=sig;
     playCallChime(false);
     return;
   }
 
-  if(!sig){
-    lastDisplayCallSignatureByLocation[key]="";
-  }
+  // IMPORTANT: if the latest call disappears because the ticket was
+  // completed/no-show, do NOT clear the baseline. Otherwise the next
+  // display reorder could be mistaken for a new call.
 }
 
 async function renderDisplay(){
