@@ -1473,6 +1473,8 @@ function renderServices(){
 
 function chooseService(serviceName){
   visitorState.service=serviceName;
+  visitorState.college=null;
+  visitorState.letter=null;
 
   const serviceRow=(serviceCatalog || []).find(
     s=>s.active &&
@@ -1481,22 +1483,48 @@ function chooseService(serviceName){
        s.service_name===serviceName
   ) || null;
 
-  // Bespoke/custom departments normally have no college/letter routing,
-  // but respect the central catalog if those flags are ever enabled.
+  visitorState.serviceMeta=serviceRow;
+
   const requiresCollege=!!serviceRow?.requires_college;
   const requiresLetter=!!serviceRow?.requires_letter;
 
   if(requiresCollege){
-    chooseCollege();
+    if(visitorState.dept==="graduates"){
+      renderGradColleges();
+    }else if(visitorState.dept==="records"){
+      renderRecordColleges();
+    }else{
+      renderGenericServiceColleges();
+    }
     return;
   }
 
   if(requiresLetter){
-    chooseLetter();
+    renderLetters();
     return;
   }
 
   issueTicket();
+}
+
+
+function renderGenericServiceColleges(){
+  const root=document.getElementById("visitorRoot");
+  const collegeOptions=gradColleges || [];
+  root.innerHTML=`
+   <div class="breadcrumb">${visitorState.service}</div>
+   <div class="card">
+    <h2 class="section-title">اختر الكلية</h2>
+    <div class="grid">
+      ${collegeOptions.map((c,i)=>`<div class="card choice" onclick="selectGenericServiceCollege(${i})"><strong>${c}</strong></div>`).join("")}
+    </div>
+    <div class="actions"><button class="btn" onclick="renderServices()">رجوع</button></div>
+   </div>`;
+}
+function selectGenericServiceCollege(i){
+  visitorState.college=(gradColleges || [])[i];
+  if(visitorState.serviceMeta?.requires_letter) renderLetters();
+  else issueTicket();
 }
 
 function renderRecordColleges(){
@@ -1545,7 +1573,13 @@ function renderLetters(){
     <div class="letters">
       ${ARABIC_LETTERS.map((l,i)=>`<button onclick="selectLetter(${i})">${l}</button>`).join("")}
     </div>
-    <div class="actions"><button class="btn" onclick="renderGradColleges()">رجوع</button></div>
+    <div class="actions"><button class="btn" onclick="${
+      visitorState.serviceMeta?.requires_college
+        ? (visitorState.dept==="records" ? "renderRecordColleges()" :
+           visitorState.dept==="graduates" ? "renderGradColleges()" :
+           "renderGenericServiceColleges()")
+        : "renderServices()"
+    }">رجوع</button></div>
    </div>`;
 }
 
@@ -1572,8 +1606,12 @@ async function issueTicket(){
   const cfg=currentConfig();
 
   let range=null;
-  if(visitorState.serviceMeta?.requires_letter && visitorState.college && visitorState.letter){
-    range=findGradRange(visitorState.college,visitorState.letter);
+  if(visitorState.serviceMeta?.requires_letter && visitorState.letter){
+    if(visitorState.college){
+      range=findGradRange(visitorState.college,visitorState.letter);
+    }else{
+      range=`${visitorState.letter}–${visitorState.letter}`;
+    }
   }
 
   const root=document.getElementById("visitorRoot");
@@ -3251,7 +3289,7 @@ function renderActiveQueueSummary(){
   if(!summary || !staff) return;
   const active=staff.activePermissions || [];
   summary.innerHTML=active.length
-    ? `قوائم الانتظار النشطة على هذا الكاونتر: <b>${active.length}</b>`
+    ? `المسارات النشطة على هذا الكاونتر: <b>${active.length}</b>`
     : `لا توجد قائمة انتظار نشطة.`;
 }
 
@@ -3458,6 +3496,15 @@ function normalizeDbTicket(row){
   };
 }
 
+
+function staffCanServeTicket(ticket){
+  if(!staff) return false;
+  if(staff.role==="superuser"){
+    return (staff.activePermissions || []).includes(routeKey(ticket));
+  }
+  return (staff.activePermissions || []).includes(routeKey(ticket));
+}
+
 async function eligibleTickets(){
   if(!staff) return [];
 
@@ -3480,7 +3527,7 @@ async function eligibleTickets(){
     .filter(t=>
       (t.locationId==null || Number(t.locationId)===Number(staff.locationId)) &&
       (staff.locationDepartments || []).includes(t.dept) &&
-      activePermissions.includes(routeKey(t))
+      staffCanServeTicket(t)
     );
 }
 
