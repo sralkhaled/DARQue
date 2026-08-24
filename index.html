@@ -4093,48 +4093,56 @@ function playCallChime(confirmationOnly=false){
 
   try{
     const ctx=callAudioContext;
+    if(ctx.state==="suspended") ctx.resume();
+
     const start=ctx.currentTime + 0.02;
 
-    // Louder, fuller call chime. The main alert uses two short two-note bursts.
-    // This is still generated locally; no audio file is required.
-    const notes=confirmationOnly
-      ? [
-          {f:784.00,t:0.00,d:.13,g:.16,type:"triangle"}
-        ]
-      : [
-          {f:659.25,t:0.00,d:.20,g:.42,type:"triangle"},
-          {f:987.77,t:0.18,d:.32,g:.46,type:"triangle"},
-          {f:659.25,t:0.70,d:.20,g:.42,type:"triangle"},
-          {f:987.77,t:0.88,d:.38,g:.48,type:"triangle"}
-        ];
-
-    // Master compressor helps the sound remain strong without harsh clipping.
-    const compressor=ctx.createDynamicsCompressor();
-    compressor.threshold.setValueAtTime(-18,start);
-    compressor.knee.setValueAtTime(12,start);
-    compressor.ratio.setValueAtTime(4,start);
-    compressor.attack.setValueAtTime(.003,start);
-    compressor.release.setValueAtTime(.18,start);
-    compressor.connect(ctx.destination);
-
-    notes.forEach(n=>{
+    // Keep the existing quiet confirmation tone when sound is enabled.
+    if(confirmationOnly){
       const osc=ctx.createOscillator();
       const gain=ctx.createGain();
 
-      osc.type=n.type || "triangle";
-      osc.frequency.setValueAtTime(n.f,start+n.t);
+      osc.type="sine";
+      osc.frequency.setValueAtTime(784,start);
 
-      gain.gain.setValueAtTime(0.0001,start+n.t);
-      gain.gain.exponentialRampToValueAtTime(n.g,start+n.t+.018);
-      gain.gain.setValueAtTime(n.g,start+n.t+Math.max(.02,n.d-.06));
-      gain.gain.exponentialRampToValueAtTime(0.0001,start+n.t+n.d);
+      gain.gain.setValueAtTime(0.0001,start);
+      gain.gain.exponentialRampToValueAtTime(0.14,start+0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001,start+0.14);
 
       osc.connect(gain);
-      gain.connect(compressor);
+      gain.connect(ctx.destination);
 
-      osc.start(start+n.t);
-      osc.stop(start+n.t+n.d+.04);
-    });
+      osc.start(start);
+      osc.stop(start+0.18);
+      return;
+    }
+
+    const master=ctx.createGain();
+    master.gain.value=0.42;
+    master.connect(ctx.destination);
+
+    function bell(freq,offset,duration,peak){
+      const osc=ctx.createOscillator();
+      const gain=ctx.createGain();
+
+      osc.type="sine";
+      osc.frequency.setValueAtTime(freq,start+offset);
+
+      gain.gain.setValueAtTime(0.0001,start+offset);
+      gain.gain.exponentialRampToValueAtTime(peak,start+offset+0.018);
+      gain.gain.exponentialRampToValueAtTime(0.0001,start+offset+duration);
+
+      osc.connect(gain);
+      gain.connect(master);
+
+      osc.start(start+offset);
+      osc.stop(start+offset+duration+0.04);
+    }
+
+    // Option 2: Ding-Dong
+    bell(784,0.00,0.42,0.34);
+    bell(523.25,0.32,0.55,0.30);
+
   }catch(err){
     console.warn("Call chime failed:",err);
   }
