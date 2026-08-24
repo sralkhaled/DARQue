@@ -967,7 +967,7 @@
 
         <div style="display:flex;gap:18px;flex-wrap:wrap;margin:8px 0 14px">
           <label><input type="checkbox" id="svcCollege"> تتطلب اختيار الكلية</label>
-          <label><input type="checkbox" id="svcLetter"> تتطلب نطاق الحروف</label>
+          <label><input type="checkbox" id="svcLetter" onchange="serviceLetterRequirementChanged()"> تتطلب نطاق الحروف</label>
         </div>
 
         <div id="serviceAdminMessage" class="notice hidden"></div>
@@ -5341,23 +5341,9 @@ function sectionLabel(value){
 }
 
 function serviceRouteRule(dept,section){
-  if(dept==="registration" || dept==="admissions" || dept==="independent")
-    return {college:false,letter:false,locked:true};
-
-  if(dept==="records")
-    return {college:null,letter:false,locked:false};
-
-  const dynamicDept=customDepartment(dept);
-  if(dynamicDept && !dynamicDept.built_in)
-    return {college:false,letter:false,locked:true};
-
-  if(dept==="graduates" && section==="reception")
-    return {college:false,letter:false,locked:true};
-
-  if(dept==="graduates" && ["activity","graduation"].includes(section))
-    return {college:true,letter:true,locked:true};
-
-  return {college:false,letter:false,locked:true};
+  // Routing requirements are now service-level settings.
+  // No department/section forces college or letter routing.
+  return {college:null,letter:null,locked:false};
 }
 
 let editingServiceId=null;
@@ -5393,35 +5379,21 @@ function closeServiceManagement(){
 function serviceAdminRouteChanged(){
   const dept=document.getElementById("svcDept").value;
   const sectionWrap=document.getElementById("svcSectionWrap");
-  const sectionEl=document.getElementById("svcSection");
-
-  if(dept==="graduates"){
-    sectionWrap.classList.remove("hidden");
-  }else{
-    sectionWrap.classList.add("hidden");
-    sectionEl.value="";
-  }
-
   const prefixWrap=document.getElementById("svcPrefixWrap");
-  if(dept==="independent") prefixWrap.classList.remove("hidden");
-  else{
-    prefixWrap.classList.add("hidden");
-    document.getElementById("svcPrefix").value="";
-  }
-
-  const rule=serviceRouteRule(dept,sectionEl.value);
   const college=document.getElementById("svcCollege");
   const letter=document.getElementById("svcLetter");
 
-  if(dept==="records"){
-    college.disabled=false;
-    letter.checked=false;
-    letter.disabled=true;
-  }else{
-    college.checked=!!rule.college;
-    letter.checked=!!rule.letter;
-    college.disabled=true;
-    letter.disabled=true;
+  sectionWrap.classList.toggle("hidden",dept!=="graduates");
+  prefixWrap.classList.toggle("hidden",dept!=="independent");
+
+  // Per-service configuration: both controls remain editable.
+  college.disabled=false;
+  letter.disabled=false;
+
+  // Letter ranges are configured by college, so a letter-routed service
+  // must also require college selection.
+  if(letter.checked){
+    college.checked=true;
   }
 }
 
@@ -5461,6 +5433,16 @@ function renderServiceAdminTable(){
 }
 
 
+
+function serviceLetterRequirementChanged(){
+  const college=document.getElementById("svcCollege");
+  const letter=document.getElementById("svcLetter");
+
+  if(letter.checked){
+    college.checked=true;
+  }
+}
+
 function resetServiceAdminForm(){
   editingServiceId=null;
   document.getElementById("svcDept").value="";
@@ -5470,6 +5452,8 @@ function resetServiceAdminForm(){
   document.getElementById("svcSort").value="100";
   document.getElementById("svcCollege").checked=false;
   document.getElementById("svcLetter").checked=false;
+  document.getElementById("svcCollege").disabled=false;
+  document.getElementById("svcLetter").disabled=false;
   document.getElementById("saveServiceBtn").textContent="إضافة الخدمة";
   document.getElementById("cancelServiceEditBtn").classList.add("hidden");
   serviceAdminRouteChanged();
@@ -5508,11 +5492,12 @@ function editServiceCatalogItem(id){
 
   serviceAdminRouteChanged();
 
-  // Restore the stored flags after route controls have been configured.
+  // Restore the service's own routing flags.
   const college=document.getElementById("svcCollege");
   const letter=document.getElementById("svcLetter");
-  if(!college.disabled) college.checked=!!s.requires_college;
-  if(!letter.disabled) letter.checked=!!s.requires_letter;
+  college.checked=!!s.requires_college;
+  letter.checked=!!s.requires_letter;
+  if(letter.checked) college.checked=true;
 
   document.getElementById("saveServiceBtn").textContent="حفظ التعديل";
   document.getElementById("cancelServiceEditBtn").classList.remove("hidden");
@@ -5544,13 +5529,10 @@ async function saveNewService(){
     return;
   }
 
-  const rule=serviceRouteRule(dept,section);
-  const requires_college = dept==="records"
-    ? document.getElementById("svcCollege").checked
-    : !!rule.college;
-  const requires_letter = rule.locked
-    ? !!rule.letter
-    : document.getElementById("svcLetter").checked;
+  const requires_letter=document.getElementById("svcLetter").checked;
+  const requires_college=requires_letter
+    ? true
+    : document.getElementById("svcCollege").checked;
 
   if(editingServiceId){
     const previous=(serviceCatalog || []).find(x=>Number(x.id)===Number(editingServiceId));
