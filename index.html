@@ -4089,16 +4089,22 @@ async function enableCallSound(){
 }
 
 function playCallChime(confirmationOnly=false){
-  if(!callSoundEnabled || !callAudioContext) return;
+  if(!callSoundEnabled) return;
 
   try{
-    const ctx=callAudioContext;
-    if(ctx.state==="suspended") ctx.resume();
-
-    const start=ctx.currentTime + 0.02;
-
-    // Keep the existing quiet confirmation tone when sound is enabled.
+    // Keep a short local confirmation tone when sound is first enabled,
+    // so enabling the screen does not play the full queue chime.
     if(confirmationOnly){
+      if(!callAudioContext){
+        const AudioCtx=window.AudioContext || window.webkitAudioContext;
+        if(AudioCtx) callAudioContext=new AudioCtx();
+      }
+      if(!callAudioContext) return;
+
+      const ctx=callAudioContext;
+      if(ctx.state==="suspended") ctx.resume();
+
+      const start=ctx.currentTime + 0.02;
       const osc=ctx.createOscillator();
       const gain=ctx.createGain();
 
@@ -4117,31 +4123,13 @@ function playCallChime(confirmationOnly=false){
       return;
     }
 
-    const master=ctx.createGain();
-    master.gain.value=0.42;
-    master.connect(ctx.destination);
-
-    function bell(freq,offset,duration,peak){
-      const osc=ctx.createOscillator();
-      const gain=ctx.createGain();
-
-      osc.type="sine";
-      osc.frequency.setValueAtTime(freq,start+offset);
-
-      gain.gain.setValueAtTime(0.0001,start+offset);
-      gain.gain.exponentialRampToValueAtTime(peak,start+offset+0.018);
-      gain.gain.exponentialRampToValueAtTime(0.0001,start+offset+duration);
-
-      osc.connect(gain);
-      gain.connect(master);
-
-      osc.start(start+offset);
-      osc.stop(start+offset+duration+0.04);
-    }
-
-    // Option 2: Ding-Dong
-    bell(784,0.00,0.42,0.34);
-    bell(523.25,0.32,0.55,0.30);
+    // Actual queue call sound: external MP3 stored beside index.html.
+    const audio=new Audio("call-chime.mp3");
+    audio.preload="auto";
+    audio.volume=1.0;
+    audio.play().catch(err=>{
+      console.warn("MP3 call chime playback failed:",err);
+    });
 
   }catch(err){
     console.warn("Call chime failed:",err);
