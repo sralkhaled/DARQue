@@ -454,6 +454,14 @@
           </div>
           <div id="guidedDepartmentChecklist" class="checklist" style="display:flex;flex-wrap:wrap;gap:10px"></div>
 
+          <div id="guidedGraduateSectionsWrap" class="field hidden" style="margin-top:14px">
+            <label>الأقسام الظاهرة للزائر — إدارة الخريجين</label>
+            <div class="muted" style="margin:4px 0 8px">
+              اختر الأقسام التي تظهر في صفحة المراجع لهذا الموقع. رابط QR لا يتغير.
+            </div>
+            <div id="guidedGraduateSectionsChecklist" class="checklist" style="display:flex;flex-wrap:wrap;gap:10px"></div>
+          </div>
+
           <details style="margin-top:18px">
             <summary style="cursor:pointer;font-weight:800">إضافة إدارة / خدمة مخصصة</summary>
             <div class="grid" style="grid-template-columns:2fr 1fr;gap:12px;margin-top:12px">
@@ -835,6 +843,14 @@
             </label>
           </div>
           <div id="locationDepartmentsChecklist" class="checklist" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px"></div>
+        </div>
+
+        <div id="locationGraduateSectionsWrap" class="field hidden" style="margin-top:14px">
+          <label>الأقسام الظاهرة للزائر — إدارة الخريجين</label>
+          <div class="muted" style="margin:4px 0 8px">
+            لا يتغير رابط الموقع أو رمز QR. يتم فقط إخفاء الأقسام غير المحددة من صفحة المراجع.
+          </div>
+          <div id="locationGraduateSectionsChecklist" class="checklist" style="display:flex;flex-wrap:wrap;gap:10px"></div>
         </div>
 
         <div id="locationAdminMessage" class="notice hidden"></div>
@@ -1484,13 +1500,29 @@ function chooseDept(d){
 
 function renderGraduateSections(){
   const root=document.getElementById("visitorRoot");
+
+  const visible=currentServiceLocation
+    ? new Set(configuredGraduateSections(currentServiceLocation))
+    : null;
+
+  const sections=Object.entries(departments.graduates.sections)
+    .filter(([k])=>!visible || visible.has(k));
+
+  // If only one graduate section is visible for this QR/location,
+  // take the visitor directly to its services instead of showing a redundant choice.
+  if(currentServiceLocation && sections.length===1){
+    visitorState.section=sections[0][0];
+    renderServices();
+    return;
+  }
+
   root.innerHTML=`
    <div class="breadcrumb">الرئيسية / إدارة الخريجين</div>
    <div class="card">
     <h2 class="section-title">إدارة الخريجين</h2>
     <p class="muted">اختر القسم</p>
     <div class="grid">
-      ${Object.entries(departments.graduates.sections).map(([k,v])=>`
+      ${sections.map(([k,v])=>`
         <div class="card choice" onclick="chooseGradSection('${k}')">
           <strong>${v.name}</strong><span>${v.services.length} خدمات</span>
         </div>`).join("")}
@@ -2108,6 +2140,7 @@ let guidedSetup={
   requiresCounter:true,
   counterCount:1,
   departments:[],
+  graduateSections:["reception","activity","graduation"],
   displayId:null,
   staffAssignments:[],
   createdCredentials:[]
@@ -2201,7 +2234,8 @@ async function startGuidedAdmin(){
 function guidedStartAnother(refresh=true){
   guidedSetup={
     step:1,locationId:null,locationName:"",locationSlug:"",
-    requiresCounter:true,counterCount:1,departments:[],displayId:null,
+    requiresCounter:true,counterCount:1,departments:[],
+    graduateSections:["reception","activity","graduation"],displayId:null,
     staffAssignments:[],createdCredentials:[]
   };
   document.getElementById("guidedExistingLocation").value="";
@@ -2233,6 +2267,7 @@ function guidedExistingLocationChanged(){
     guidedSetup.locationId=null;
     guidedSetup.displayId=null;
     guidedSetup.departments=[];
+    guidedSetup.graduateSections=["reception","activity","graduation"];
     document.getElementById("guidedLocationName").value="";
     document.getElementById("guidedLocationSlug").value="";
     if(title) title.textContent="إضافة موقع خدمة";
@@ -2260,6 +2295,7 @@ function guidedExistingLocationChanged(){
   }
 
   guidedSetup.departments=(l.service_location_departments||[]).map(x=>x.department);
+  guidedSetup.graduateSections=configuredGraduateSections(l);
 }
 
 async function guidedDeleteCurrentLocation(){
@@ -2332,6 +2368,16 @@ function guidedRenderDepartments(){
       <input class="guided-dept-checkbox" type="checkbox" value="${d.slug}" ${selected.has(d.slug)?"checked":""}>
       <span>${d.name}</span>
     </label>`).join("");
+
+  renderGraduateSectionChecklist(
+    "guidedGraduateSectionsChecklist",
+    guidedSetup.graduateSections
+  );
+  updateGuidedGraduateSectionVisibility();
+
+  box.querySelectorAll(".guided-dept-checkbox").forEach(cb=>{
+    cb.addEventListener("change",updateGuidedGraduateSectionVisibility);
+  });
 }
 
 async function guidedAddCustomDepartment(){
@@ -2483,7 +2529,14 @@ async function guidedSaveLocationSetup(){
     guidedSetMessage("يرجى اختيار إدارة واحدة على الأقل.",true);
     return;
   }
+  const graduateSections=selectedGraduateSections("guidedGraduateSectionsChecklist");
+  if(departments.includes("graduates") && !graduateSections.length){
+    guidedSetMessage("يرجى اختيار قسم واحد على الأقل من إدارة الخريجين ليظهر للمراجع.",true);
+    return;
+  }
+
   guidedSetup.departments=departments;
+  guidedSetup.graduateSections=graduateSections;
 
   try{
     const existing=guidedSetup.locationId
@@ -2521,6 +2574,7 @@ async function guidedSaveLocationSetup(){
     }
 
     await syncLocationDepartments(locationId,departments);
+    await syncLocationVisibleSections(locationId,departments,graduateSections);
 
     if(guidedSetup.requiresCounter){
       await loadHallsAndDisplays();
@@ -4412,7 +4466,7 @@ setInterval(()=>{
 
 async function loadServiceLocations(){
   const {data,error}=await supabaseClient.from("service_locations")
-    .select("id,name,slug,display_id,active,sort_order,display_configs(id,name,slug,active),service_location_departments(department)")
+    .select("id,name,slug,display_id,active,sort_order,display_configs(id,name,slug,active),service_location_departments(department),service_location_visible_sections(department,section,sort_order)")
     .order("sort_order",{ascending:true});
   if(error){ console.error(error); serviceLocations=[]; return false; }
   serviceLocations=data||[];
@@ -4483,6 +4537,73 @@ function locationDepartmentChoices(){
   );
 }
 
+
+const graduateSectionChoices=[
+  {section:"reception",name:"قسم الاستقبال"},
+  {section:"activity",name:"قسم نشاط الخريج"},
+  {section:"graduation",name:"قسم شؤون التخرج"}
+];
+
+function configuredGraduateSections(location){
+  const rows=(location?.service_location_visible_sections || [])
+    .filter(x=>x.department==="graduates" && x.section)
+    .map(x=>x.section);
+
+  // Backward compatibility: locations created before this feature show all sections.
+  return rows.length ? rows : graduateSectionChoices.map(x=>x.section);
+}
+
+function renderGraduateSectionChecklist(containerId,selectedSections){
+  const box=document.getElementById(containerId);
+  if(!box) return;
+  const selected=new Set(
+    (selectedSections && selectedSections.length)
+      ? selectedSections
+      : graduateSectionChoices.map(x=>x.section)
+  );
+  box.innerHTML=graduateSectionChoices.map(x=>`
+    <label class="check" style="min-width:220px">
+      <input class="graduate-section-checkbox" type="checkbox"
+             value="${x.section}" ${selected.has(x.section)?"checked":""}>
+      <span>${x.name}</span>
+    </label>`).join("");
+}
+
+function selectedGraduateSections(containerId){
+  const box=document.getElementById(containerId);
+  if(!box) return [];
+  return [...box.querySelectorAll(".graduate-section-checkbox:checked")]
+    .map(x=>x.value);
+}
+
+function updateAdvancedGraduateSectionVisibility(){
+  const wrap=document.getElementById("locationGraduateSectionsWrap");
+  if(!wrap) return;
+  const graduatesSelected=[...document.querySelectorAll(".location-department-checkbox:checked")]
+    .some(x=>x.value==="graduates");
+  wrap.classList.toggle("hidden",!graduatesSelected);
+}
+
+function updateGuidedGraduateSectionVisibility(){
+  const wrap=document.getElementById("guidedGraduateSectionsWrap");
+  if(!wrap) return;
+  const graduatesSelected=[...document.querySelectorAll(".guided-dept-checkbox:checked")]
+    .some(x=>x.value==="graduates");
+  wrap.classList.toggle("hidden",!graduatesSelected);
+}
+
+async function syncLocationVisibleSections(locationId,departments,graduateSections){
+  const sections=departments.includes("graduates") ? graduateSections : [];
+
+  const {error}=await supabaseClient.rpc("save_location_visible_sections",{
+    p_location_id:Number(locationId),
+    p_department:"graduates",
+    p_sections:sections
+  });
+
+  if(error) throw error;
+}
+
 function renderLocationDepartmentsChecklist(selectedDepartments=[]){
   const box=document.getElementById("locationDepartmentsChecklist");
   const selectAll=document.getElementById("locationSelectAllDepartments");
@@ -4517,11 +4638,14 @@ function renderLocationDepartmentsChecklist(selectedDepartments=[]){
     const all=[...document.querySelectorAll(".location-department-checkbox")];
     selectAll.checked=all.length>0 && all.every(x=>x.checked);
   }
+
+  updateAdvancedGraduateSectionVisibility();
 }
 
 function toggleAllLocationDepartments(checked){
   document.querySelectorAll(".location-department-checkbox")
     .forEach(x=>x.checked=checked);
+  updateAdvancedGraduateSectionVisibility();
 }
 
 document.addEventListener("change",e=>{
@@ -4529,6 +4653,7 @@ document.addEventListener("change",e=>{
   const all=[...document.querySelectorAll(".location-department-checkbox")];
   const selectAll=document.getElementById("locationSelectAllDepartments");
   if(selectAll) selectAll.checked=all.length>0 && all.every(x=>x.checked);
+  updateAdvancedGraduateSectionVisibility();
 });
 
 function selectedLocationDepartments(){
@@ -4551,6 +4676,11 @@ function resetServiceLocationForm(){
   const physical=document.getElementById("locationRequiresCounter");
   if(physical) physical.checked=true;
   renderLocationDepartmentsChecklist([]);
+  renderGraduateSectionChecklist(
+    "locationGraduateSectionsChecklist",
+    graduateSectionChoices.map(x=>x.section)
+  );
+  updateAdvancedGraduateSectionVisibility();
   const selectAll=document.getElementById("locationSelectAllDepartments");
   if(selectAll) selectAll.checked=false;
   const saveBtn=document.getElementById("saveLocationBtn");
@@ -4588,6 +4718,11 @@ function editServiceLocation(id){
   renderLocationDepartmentsChecklist(
     (l.service_location_departments || []).map(x=>x.department)
   );
+  renderGraduateSectionChecklist(
+    "locationGraduateSectionsChecklist",
+    configuredGraduateSections(l)
+  );
+  updateAdvancedGraduateSectionVisibility();
 
   const saveBtn=document.getElementById("saveLocationBtn");
   const cancelBtn=document.getElementById("cancelLocationEditBtn");
@@ -4729,6 +4864,7 @@ async function saveServiceLocation(){
   const sort_order=Number(document.getElementById("locationSort").value||100);
   const requiresCounter=!!document.getElementById("locationRequiresCounter")?.checked;
   const departments=selectedLocationDepartments();
+  const graduateSections=selectedGraduateSections("locationGraduateSectionsChecklist");
   const msg=document.getElementById("locationAdminMessage");
 
   if(!name||!slug){
@@ -4739,6 +4875,12 @@ async function saveServiceLocation(){
 
   if(!departments.length){
     msg.textContent="يرجى تحديد إدارة واحدة على الأقل لهذا الموقع.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  if(departments.includes("graduates") && !graduateSections.length){
+    msg.textContent="يرجى تحديد قسم واحد على الأقل من إدارة الخريجين ليظهر للمراجع.";
     msg.classList.remove("hidden");
     return;
   }
@@ -4782,6 +4924,7 @@ async function saveServiceLocation(){
     }
 
     await syncLocationDepartments(locationId,departments);
+    await syncLocationVisibleSections(locationId,departments,graduateSections);
 
     msg.textContent=editingServiceLocationId
       ? requiresCounter ? "تم حفظ الموقع وربطه بقاعة الكاونترات." : "تم حفظ الموقع دون كاونتر فعلي."
@@ -4991,6 +5134,12 @@ function renderLocationVisitorHome(){
           admissions:"خدمات القبول والتقديم",
           graduates:"الاستقبال ونشاط الخريج وشؤون التخرج"
         };
+        if(d.slug==="graduates"){
+          const visibleNames=configuredGraduateSections(currentServiceLocation)
+            .map(s=>departments.graduates.sections?.[s]?.name)
+            .filter(Boolean);
+          descriptions.graduates=visibleNames.join("، ");
+        }
         const subtitle=descriptions[d.slug]||"";
         return `<div class="card choice" onclick="chooseLocationDepartment('${d.slug}')">
           <strong>${d.name}</strong>
