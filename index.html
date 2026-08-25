@@ -220,6 +220,24 @@
     color:#002856;
   }
 
+
+  .report-bars{display:flex;flex-direction:column;gap:9px}
+  .report-bar-row{display:grid;grid-template-columns:92px 1fr 52px;gap:10px;align-items:center;font-size:13px}
+  .report-bar-track{height:12px;background:#edf1f5;border-radius:999px;overflow:hidden}
+  .report-bar-fill{height:100%;background:#002856;border-radius:999px;min-width:2px}
+  .report-table-wrap{overflow:auto}
+  .report-table{width:100%;border-collapse:collapse;font-size:13px}
+  .report-table th,.report-table td{padding:9px 8px;border-bottom:1px solid #e5e7eb;text-align:right;white-space:nowrap}
+  .report-table th{color:#475467;font-weight:700;background:#f8fafc}
+  .report-table td.num,.report-table th.num{text-align:center}
+  @media print{
+    header,.nav,#reports .card:first-of-type,#reportLoading,#reportError{display:none!important}
+    body{background:#fff!important}
+    #reports{display:block!important}
+    .card,.oversight-stat{box-shadow:none!important;break-inside:avoid}
+    #reportContent{display:block!important}
+  }
+
 </style>
 </head>
 <body>
@@ -235,6 +253,7 @@
   <div class="nav hidden">
     <button id="setupNavBtn" onclick="startGuidedAdmin()">إعداد موقع الخدمة</button>
     <button id="oversightNavBtn" class="hidden" onclick="openOversightDashboard()">لوحة المتابعة</button>
+    <button id="reportsNavBtn" class="hidden" onclick="openReportsDashboard()">التقارير</button>
     <button id="adminNavBtn" onclick="openAdvancedAdmin()">إعدادات النظام</button>
   </div>
 </header>
@@ -602,6 +621,73 @@
         </label>
       </div>
       <div id="oversightLocations"><div class="muted">جاري التحميل...</div></div>
+    </div>
+  </section>
+
+  <!-- REPORTS -->
+  <section id="reports" class="view">
+    <div class="hero">
+      <h2>التقارير</h2>
+      <p>تقارير تشغيلية وتاريخية لمواقع الخدمة والطوابير والكاونترات</p>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-end;flex-wrap:wrap">
+        <div>
+          <h3 class="section-title" style="margin-bottom:4px">مرشحات التقرير</h3>
+          <div class="muted">حدد الفترة أو نطاق التشغيل المطلوب ثم اضغط «عرض التقرير»</div>
+        </div>
+        <div class="actions" style="margin:0">
+          <button class="btn primary" onclick="refreshReportsDashboard()">عرض التقرير</button>
+          <button class="btn" onclick="exportReportCsv()">تصدير CSV</button>
+          <button class="btn" onclick="printReportsDashboard()">طباعة</button>
+        </div>
+      </div>
+
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-top:16px">
+        <div class="field" style="margin:0"><label>من تاريخ</label><input id="reportStartDate" type="date"></div>
+        <div class="field" style="margin:0"><label>إلى تاريخ</label><input id="reportEndDate" type="date"></div>
+        <div class="field" style="margin:0"><label>موقع الخدمة</label><select id="reportLocation"><option value="">الكل</option></select></div>
+        <div class="field" style="margin:0"><label>الإدارة</label><select id="reportDepartment" onchange="reportDepartmentChanged()"><option value="">الكل</option></select></div>
+        <div class="field" style="margin:0"><label>الخدمة</label><select id="reportService"><option value="">الكل</option></select></div>
+        <div class="field" style="margin:0"><label>الكاونتر</label><select id="reportCounter"><option value="">الكل</option></select></div>
+        <div class="field" style="margin:0"><label>الموظف</label><select id="reportStaff"><option value="">الكل</option></select></div>
+      </div>
+      <div id="reportFilterNote" class="muted" style="margin-top:10px"></div>
+    </div>
+
+    <div id="reportLoading" class="notice hidden">جاري إعداد التقرير...</div>
+    <div id="reportError" class="notice hidden"></div>
+
+    <div id="reportContent">
+      <div class="oversight-summary" id="reportSummaryCards">
+        <div class="oversight-stat"><div class="muted">إجمالي الأرقام</div><div class="value" id="rpTotal">0</div><div class="muted">ضمن الفترة</div></div>
+        <div class="oversight-stat"><div class="muted">تمت خدمتهم</div><div class="value" id="rpDone">0</div><div class="muted" id="rpDoneRate">0%</div></div>
+        <div class="oversight-stat"><div class="muted">لم يحضر</div><div class="value" id="rpNoShow">0</div><div class="muted" id="rpNoShowRate">0%</div></div>
+        <div class="oversight-stat"><div class="muted">متوسط الانتظار</div><div class="value" id="rpAvgWait">—</div><div class="muted">حتى النداء</div></div>
+        <div class="oversight-stat"><div class="muted">أطول انتظار</div><div class="value" id="rpMaxWait">—</div><div class="muted">ضمن الفترة</div></div>
+        <div class="oversight-stat"><div class="muted">متوسط مدة الخدمة</div><div class="value" id="rpAvgService">—</div><div class="muted">من النداء حتى الإنهاء</div></div>
+        <div class="oversight-stat"><div class="muted">ساعة الذروة</div><div class="value" id="rpPeakHour">—</div><div class="muted" id="rpPeakHourCount">0 رقم</div></div>
+      </div>
+
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));margin-top:16px">
+        <div class="card">
+          <h3 class="section-title">الحركة حسب اليوم</h3>
+          <div id="reportDailyChart" class="report-bars"><div class="muted">لا توجد بيانات</div></div>
+        </div>
+        <div class="card">
+          <h3 class="section-title">الحركة حسب الساعة</h3>
+          <div id="reportHourlyChart" class="report-bars"><div class="muted">لا توجد بيانات</div></div>
+        </div>
+      </div>
+
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(360px,1fr));margin-top:16px">
+        <div class="card"><h3 class="section-title">حسب موقع الخدمة</h3><div id="reportLocationsTable"></div></div>
+        <div class="card"><h3 class="section-title">حسب الإدارة</h3><div id="reportDepartmentsTable"></div></div>
+        <div class="card"><h3 class="section-title">حسب الخدمة</h3><div id="reportServicesTable"></div></div>
+        <div class="card"><h3 class="section-title">حسب الكاونتر</h3><div id="reportCountersTable"></div></div>
+        <div class="card" style="grid-column:1/-1"><h3 class="section-title">حسب الموظف</h3><div class="muted" style="margin-bottom:10px">تتوفر نسبة الموظف للتذاكر الجديدة من تاريخ تفعيل وحدة التقارير؛ لا يتم تخمين الموظف للتذاكر السابقة.</div><div id="reportStaffTable"></div></div>
+      </div>
     </div>
   </section>
 
@@ -1297,6 +1383,10 @@ function showView(id){
     alert("ليست لديك صلاحية لوحة المتابعة.");
     return;
   }
+  if(id==="reports" && (!staff || !["superuser","overseer"].includes(staff.role))){
+    alert("ليست لديك صلاحية التقارير.");
+    return;
+  }
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   document.getElementById(id).classList.add("active");
   document.querySelectorAll(".nav button[data-view]").forEach(b=>b.classList.toggle("active",b.dataset.view===id));
@@ -1304,6 +1394,7 @@ function showView(id){
   if(id==="staff" && staff) refreshStaff();
   if(id==="admin") loadAdminUsers();
   if(id==="oversight") refreshOversightDashboard();
+  if(id==="reports") initializeReportsDashboard();
 }
 document.querySelectorAll(".nav button[data-view]").forEach(b=>b.onclick=()=>showView(b.dataset.view));
 
@@ -2083,6 +2174,7 @@ function guidedRefreshLocationDropdown(selectedId=""){
 async function startGuidedAdmin(){
   stopOversightAutoRefresh();
   document.getElementById("oversightNavBtn")?.classList.remove("active");
+  document.getElementById("reportsNavBtn")?.classList.remove("active");
 
   const nav=document.querySelector(".nav");
   if(nav) nav.classList.remove("hidden");
@@ -3050,6 +3142,7 @@ async function guidedOperateCounter(){
 async function openAdvancedAdmin(){
   stopOversightAutoRefresh();
   document.getElementById("oversightNavBtn")?.classList.remove("active");
+  document.getElementById("reportsNavBtn")?.classList.remove("active");
 
   const nav=document.querySelector(".nav");
   if(nav) nav.classList.remove("hidden");
@@ -3183,18 +3276,20 @@ async function staffLogin(){
   };
 
   document.getElementById("adminNavBtn").classList.toggle("hidden", profile.role!=="superuser");
+  document.getElementById("reportsNavBtn")?.classList.toggle("hidden", !["superuser","overseer"].includes(profile.role));
   document.getElementById("oversightNavBtn")?.classList.toggle(
     "hidden",
-    !(profile.role==="superuser" && profile.can_oversee===true)
+    !(profile.role==="overseer" || (profile.role==="superuser" && profile.can_oversee===true))
   );
   document.getElementById("superuserQuickAccess").classList.toggle("hidden", profile.role!=="superuser");
 
   if(profile.role==="overseer"){
     document.getElementById("staffLogin").classList.add("hidden");
     document.getElementById("staffPanel").classList.add("hidden");
-    document.querySelector(".nav")?.classList.add("hidden");
-    showView("oversight");
-    startOversightAutoRefresh();
+    document.querySelector(".nav")?.classList.remove("hidden");
+    document.getElementById("setupNavBtn")?.classList.add("hidden");
+    document.getElementById("adminNavBtn")?.classList.add("hidden");
+    openOversightDashboard();
     return;
   }
 
@@ -3234,6 +3329,8 @@ async function staffLogout(){
   current=null;
   document.getElementById("adminNavBtn").classList.add("hidden");
   document.getElementById("oversightNavBtn")?.classList.add("hidden");
+  document.getElementById("reportsNavBtn")?.classList.add("hidden");
+  document.getElementById("setupNavBtn")?.classList.remove("hidden");
   document.getElementById("superuserQuickAccess").classList.add("hidden");
   document.getElementById("staffPanel").classList.add("hidden");
   document.getElementById("staffLogin").classList.remove("hidden");
@@ -3933,7 +4030,8 @@ async function callTicketById(ticketId){
       status:"called",
       hall_id:staff.hallId || null,
       counter_number:staff.counter ? Number(staff.counter) : null,
-      called_at:now
+      called_at:now,
+      served_by_user_id:staff.userId || null
     })
     .eq("id",candidate.id)
     .eq("status","waiting")
@@ -3967,7 +4065,8 @@ async function pushCall(t){
       hall_id:staff.hallId || null,
       department:t.dept,
       section:t.section || null,
-      service:t.service
+      service:t.service,
+      staff_user_id:staff.userId || null
     });
 
   if(error){
@@ -5901,6 +6000,188 @@ async function clearAllUserPermissions(){
 }
 
 
+
+let reportsData={summary:{},daily:[],hourly:[],locations:[],departments:[],services:[],counters:[],staff:[]};
+let reportOptions={locations:[],departments:[],services:[],counters:[],staff:[]};
+let reportsOptionsLoaded=false;
+
+function reportAccessAllowed(){
+  return !!staff && ["superuser","overseer"].includes(staff.role);
+}
+
+function kuwaitIsoDate(d=new Date()){
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Kuwait",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(d);
+  const o=Object.fromEntries(parts.map(x=>[x.type,x.value]));
+  return `${o.year}-${o.month}-${o.day}`;
+}
+
+async function openReportsDashboard(){
+  if(!reportAccessAllowed()){
+    alert("ليست لديك صلاحية التقارير.");
+    return;
+  }
+  stopOversightAutoRefresh();
+  document.querySelector(".nav")?.classList.remove("hidden");
+  document.querySelectorAll(".nav button").forEach(b=>b.classList.remove("active"));
+  document.getElementById("reportsNavBtn")?.classList.add("active");
+  showView("reports");
+  await initializeReportsDashboard();
+  await refreshReportsDashboard();
+}
+
+async function initializeReportsDashboard(){
+  if(!reportAccessAllowed()) return;
+  const start=document.getElementById("reportStartDate");
+  const end=document.getElementById("reportEndDate");
+  if(start && !start.value) start.value=kuwaitIsoDate();
+  if(end && !end.value) end.value=kuwaitIsoDate();
+  if(!reportsOptionsLoaded) await loadReportOptions();
+}
+
+async function loadReportOptions(){
+  const {data,error}=await supabaseClient.rpc("get_queue_report_options");
+  if(error){
+    console.error("Report options failed:",error);
+    return;
+  }
+  reportOptions=data || {locations:[],departments:[],services:[],counters:[],staff:[]};
+  reportsOptionsLoaded=true;
+  fillReportSelect("reportLocation",reportOptions.locations,"id","name");
+  fillReportSelect("reportDepartment",reportOptions.departments,"slug","name");
+  fillReportSelect("reportCounter",reportOptions.counters,"counter_number","label");
+  fillReportSelect("reportStaff",reportOptions.staff,"id","name");
+  reportDepartmentChanged();
+}
+
+function fillReportSelect(id,rows,valueKey,labelKey){
+  const el=document.getElementById(id); if(!el) return;
+  const keep=el.value;
+  el.innerHTML=`<option value="">الكل</option>`+(rows||[]).map(r=>`<option value="${escapeHtml(String(r[valueKey]??""))}">${escapeHtml(String(r[labelKey]??""))}</option>`).join("");
+  if([...el.options].some(o=>o.value===keep)) el.value=keep;
+}
+
+function reportDepartmentChanged(){
+  const dept=document.getElementById("reportDepartment")?.value || "";
+  const rows=(reportOptions.services||[]).filter(s=>!dept || s.department===dept);
+  fillReportSelect("reportService",rows,"service_name","service_name");
+}
+
+function reportDuration(v){
+  if(v===null || v===undefined || v==="" || !Number.isFinite(Number(v))) return "—";
+  const n=Math.max(0,Math.round(Number(v)));
+  if(n<60) return `${n} د`;
+  const h=Math.floor(n/60),m=n%60;
+  return m ? `${h} س ${m} د` : `${h} س`;
+}
+
+function reportPercent(n,d){
+  const den=Number(d||0); if(!den) return "0%";
+  return `${Math.round((Number(n||0)/den)*100)}%`;
+}
+
+async function refreshReportsDashboard(){
+  if(!reportAccessAllowed()) return;
+  await initializeReportsDashboard();
+
+  const start=document.getElementById("reportStartDate")?.value;
+  const end=document.getElementById("reportEndDate")?.value;
+  if(!start || !end){ alert("يرجى تحديد فترة التقرير."); return; }
+  if(start>end){ alert("تاريخ البداية يجب أن يسبق تاريخ النهاية."); return; }
+
+  document.getElementById("reportLoading")?.classList.remove("hidden");
+  document.getElementById("reportError")?.classList.add("hidden");
+
+  const locationVal=document.getElementById("reportLocation")?.value || "";
+  const counterVal=document.getElementById("reportCounter")?.value || "";
+  const staffVal=document.getElementById("reportStaff")?.value || "";
+
+  const {data,error}=await supabaseClient.rpc("get_queue_report",{
+    p_start_date:start,
+    p_end_date:end,
+    p_location_id:locationVal ? Number(locationVal) : null,
+    p_department:document.getElementById("reportDepartment")?.value || null,
+    p_service:document.getElementById("reportService")?.value || null,
+    p_counter_number:counterVal ? Number(counterVal) : null,
+    p_staff_user_id:staffVal || null
+  });
+
+  document.getElementById("reportLoading")?.classList.add("hidden");
+  if(error){
+    console.error("Report query failed:",error);
+    const box=document.getElementById("reportError");
+    if(box){ box.textContent=`تعذر إعداد التقرير: ${error.message}`; box.classList.remove("hidden"); }
+    return;
+  }
+  reportsData=data || {summary:{},daily:[],hourly:[],locations:[],departments:[],services:[],counters:[],staff:[]};
+  renderReportsDashboard();
+}
+
+function renderReportsDashboard(){
+  const s=reportsData.summary || {};
+  const set=(id,val)=>{const e=document.getElementById(id); if(e)e.textContent=val;};
+  set("rpTotal",s.total||0);
+  set("rpDone",s.done||0);
+  set("rpNoShow",s.noshow||0);
+  set("rpDoneRate",reportPercent(s.done,s.total));
+  set("rpNoShowRate",reportPercent(s.noshow,s.total));
+  set("rpAvgWait",reportDuration(s.avg_wait_minutes));
+  set("rpMaxWait",reportDuration(s.max_wait_minutes));
+  set("rpAvgService",reportDuration(s.avg_service_minutes));
+  set("rpPeakHour",s.peak_hour_label || "—");
+  set("rpPeakHourCount",`${s.peak_hour_count||0} رقم`);
+
+  renderReportBars("reportDailyChart",reportsData.daily||[],"label","total");
+  renderReportBars("reportHourlyChart",reportsData.hourly||[],"label","total");
+  renderReportTable("reportLocationsTable",reportsData.locations||[],"name");
+  renderReportTable("reportDepartmentsTable",reportsData.departments||[],"name");
+  renderReportTable("reportServicesTable",reportsData.services||[],"name");
+  renderReportTable("reportCountersTable",reportsData.counters||[],"name");
+  renderReportTable("reportStaffTable",reportsData.staff||[],"name",true);
+
+  const note=document.getElementById("reportFilterNote");
+  if(note){
+    note.textContent=`الفترة: ${document.getElementById("reportStartDate").value} إلى ${document.getElementById("reportEndDate").value} — التوقيت المعتمد: الكويت`;
+  }
+}
+
+function renderReportBars(id,rows,labelKey,valueKey){
+  const el=document.getElementById(id); if(!el)return;
+  if(!rows.length){el.innerHTML=`<div class="muted">لا توجد بيانات ضمن الفترة المحددة</div>`;return;}
+  const max=Math.max(...rows.map(r=>Number(r[valueKey]||0)),1);
+  el.innerHTML=rows.map(r=>{
+    const v=Number(r[valueKey]||0);
+    const pct=Math.max(2,Math.round(v/max*100));
+    return `<div class="report-bar-row"><div>${escapeHtml(String(r[labelKey]||""))}</div><div class="report-bar-track"><div class="report-bar-fill" style="width:${pct}%"></div></div><div style="text-align:center;font-weight:700">${v}</div></div>`;
+  }).join("");
+}
+
+function renderReportTable(id,rows,nameKey,staffMode=false){
+  const el=document.getElementById(id); if(!el)return;
+  if(!rows.length){el.innerHTML=`<div class="muted">لا توجد بيانات</div>`;return;}
+  el.innerHTML=`<div class="report-table-wrap"><table class="report-table"><thead><tr>
+    <th>${staffMode?"الموظف":"البيان"}</th><th class="num">الإجمالي</th><th class="num">تمت الخدمة</th><th class="num">لم يحضر</th><th class="num">متوسط الانتظار</th><th class="num">متوسط الخدمة</th>
+  </tr></thead><tbody>${rows.map(r=>`<tr>
+    <td>${escapeHtml(String(r[nameKey]||"—"))}</td><td class="num">${r.total||0}</td><td class="num">${r.done||0}</td><td class="num">${r.noshow||0}</td><td class="num">${reportDuration(r.avg_wait_minutes)}</td><td class="num">${reportDuration(r.avg_service_minutes)}</td>
+  </tr>`).join("")}</tbody></table></div>`;
+}
+
+function csvCell(v){
+  const s=String(v??"");
+  return `"${s.replaceAll('"','""')}"`;
+}
+
+function exportReportCsv(){
+  if(!reportsData?.summary){alert("يرجى عرض التقرير أولاً.");return;}
+  const rows=[["التصنيف","البيان","الإجمالي","تمت الخدمة","لم يحضر","متوسط الانتظار بالدقائق","متوسط مدة الخدمة بالدقائق"]];
+  const add=(cat,arr)=>{(arr||[]).forEach(r=>rows.push([cat,r.name,r.total||0,r.done||0,r.noshow||0,r.avg_wait_minutes??"",r.avg_service_minutes??""]));};
+  add("موقع الخدمة",reportsData.locations); add("الإدارة",reportsData.departments); add("الخدمة",reportsData.services); add("الكاونتر",reportsData.counters); add("الموظف",reportsData.staff);
+  const csv="\ufeff"+rows.map(r=>r.map(csvCell).join(",")).join("\r\n");
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`DARQue-report-${kuwaitIsoDate()}.csv`; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),500);
+}
+
+function printReportsDashboard(){ window.print(); }
+
 let staffPresenceTimer=null;
 let oversightTimer=null;
 let oversightRealtimeChannel=null;
@@ -5940,6 +6221,7 @@ function openOversightDashboard(){
   document.querySelector(".nav")?.classList.remove("hidden");
   document.getElementById("setupNavBtn")?.classList.remove("active");
   document.getElementById("adminNavBtn")?.classList.remove("active");
+  document.getElementById("reportsNavBtn")?.classList.remove("active");
   document.getElementById("oversightNavBtn")?.classList.add("active");
   showView("oversight");
   startOversightAutoRefresh();
