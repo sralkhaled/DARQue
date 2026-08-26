@@ -798,12 +798,19 @@
 
           <div class="field">
             <label>الإدارة</label>
-            <select id="newStaffDepartment">
+            <select id="newStaffDepartment" onchange="updateNewUserDepartmentState()">
               <option value="">اختر الإدارة</option>
               <option value="registration">إدارة التسجيل</option>
               <option value="records">إدارة السجلات</option>
               <option value="admissions">إدارة القبول</option>
               <option value="graduates">إدارة الخريجين</option>
+            </select>
+          </div>
+
+          <div class="field hidden" id="newStaffSectionWrap">
+            <label>القسم</label>
+            <select id="newStaffSection">
+              <option value="">اختر القسم</option>
             </select>
           </div>
         </div>
@@ -1120,9 +1127,6 @@
             <label>القسم</label>
             <select id="permSection" onchange="renderPermissionBuilder()">
               <option value="">اختر القسم</option>
-              <option value="reception">قسم الاستقبال</option>
-              <option value="activity">قسم نشاط الخريج</option>
-              <option value="graduation">قسم شؤون التخرج</option>
             </select>
           </div>
         </div>
@@ -1187,12 +1191,19 @@
             </div>
             <div class="field">
               <label>الإدارة</label>
-              <select id="editStaffDepartment">
+              <select id="editStaffDepartment" onchange="updateEditDepartmentState()">
                 <option value="">اختر الإدارة</option>
                 <option value="registration">إدارة التسجيل</option>
                 <option value="records">إدارة السجلات</option>
                 <option value="admissions">إدارة القبول</option>
                 <option value="graduates">إدارة الخريجين</option>
+              </select>
+            </div>
+
+            <div class="field hidden" id="editStaffSectionWrap">
+              <label>القسم</label>
+              <select id="editStaffSection">
+                <option value="">اختر القسم</option>
               </select>
             </div>
           </div>
@@ -2085,7 +2096,7 @@ function showIssuedTicket(t){
   refreshStaff();
 }
 
-async function fetchCentralPermissions(userId){
+async function fetchCentralPermissions(userId,homeDepartment=null,homeSection=null){
   const { data:permissionRows, error:permissionError } = await supabaseClient
     .from("staff_permissions")
     .select("department,section,college,letter_range,service_catalog(service_name)")
@@ -2096,7 +2107,20 @@ async function fetchCentralPermissions(userId){
     return [];
   }
 
-  return (permissionRows || []).map(p=>{
+  const scopedRows=(permissionRows || []).filter(p=>{
+    // Existing users with no assigned section remain backward-compatible.
+    if(!homeSection) return true;
+
+    // The section restriction applies to the employee's own administration.
+    // This also supports future administrations that develop sections.
+    if(homeDepartment && p.department===homeDepartment){
+      return (p.section || null)===homeSection;
+    }
+
+    return true;
+  });
+
+  return scopedRows.map(p=>{
     const serviceName=p.service_catalog?.service_name;
     if(!serviceName) return null;
     let key=p.department;
@@ -2111,7 +2135,7 @@ async function fetchCentralPermissions(userId){
 async function refreshStaffPermissions(){
   if(!staff?.userId) return;
 
-  const updated=await fetchCentralPermissions(staff.userId);
+  const updated=await fetchCentralPermissions(staff.userId,staff.department,staff.section || null);
   const oldJson=JSON.stringify(staff.permissions || []);
   const newJson=JSON.stringify(updated || []);
 
@@ -3272,7 +3296,7 @@ async function staffLogin(){
 
   const { data:profile, error:profileError } = await supabaseClient
     .from("profiles")
-    .select("id,username,full_name,role,department,active,must_change_password,can_oversee")
+    .select("id,username,full_name,role,department,section,active,must_change_password,can_oversee")
     .eq("id",authData.user.id)
     .single();
 
@@ -3296,6 +3320,7 @@ async function staffLogin(){
       name:profile.full_name,
       role:profile.role,
       department:profile.department,
+      section:profile.section || null,
       canOversee:!!profile.can_oversee
     };
     document.getElementById("staffLogin").classList.add("hidden");
@@ -3303,7 +3328,7 @@ async function staffLogin(){
     return;
   }
 
-  const centralPermissions=await fetchCentralPermissions(profile.id);
+  const centralPermissions=await fetchCentralPermissions(profile.id,profile.department,profile.section || null);
 
   staff={
     userId:profile.id,
@@ -3311,6 +3336,7 @@ async function staffLogin(){
     name:profile.full_name,
     role:profile.role,
     department:profile.department,
+    section:profile.section || null,
     canOversee:!!profile.can_oversee,
     counter:"",
     counterId:null,
@@ -3613,6 +3639,44 @@ async function applyStaffWorkstation(){
   await refreshStaff();
 }
 
+
+function parsePermissionRoute(key){
+  const parts=String(key||"").split("|");
+  const dept=parts[0] || "";
+  let i=1;
+
+  const knownSections=new Set(sectionOptionsForDepartment(dept).map(o=>o.value));
+  let section=null;
+  if(parts[i] && knownSections.has(parts[i])){
+    section=parts[i];
+    i++;
+  }
+
+  const service=parts[i] || "";
+  i++;
+
+  const college=parts[i] || null;
+  i++;
+
+  const range=parts[i] || null;
+
+  return {dept,section,service,college,range};
+}
+
+function authorizedQueueCardLabel(key){
+  const route=parsePermissionRoute(key);
+
+  const detail=[
+    route.college,
+    route.range ? `الحروف ${route.range}` : null
+  ].filter(Boolean).join(" — ");
+
+  return `
+    <div style="font-weight:800;line-height:1.5">${escapeHtml(route.service || "الخدمة")}</div>
+    ${detail ? `<div class="muted" style="font-size:12px;margin-top:4px">${escapeHtml(detail)}</div>` : ""}
+  `;
+}
+
 function permissionKeyLabel(key){
   const parts=String(key||"").split("|");
   const dept=parts[0];
@@ -3681,7 +3745,7 @@ function renderAuthorizedQueueSelector(){
              value="${encodeURIComponent(key)}"
              ${active.includes(key)?"checked":""}
              onchange="syncAuthorizedQueueSelectAll()">
-      ${permissionKeyLabel(key)}
+      <span>${authorizedQueueCardLabel(key)}</span>
     </label>
   `).join("");
 
@@ -5595,7 +5659,41 @@ function sectionLabel(value){
     activity:"قسم نشاط الخريج",
     graduation:"قسم شؤون التخرج"
   };
-  return map[value] || "—";
+  return map[value] || value || "—";
+}
+
+function sectionOptionsForDepartment(dept){
+  if(!dept) return [];
+
+  const seen=new Set();
+  return (serviceCatalog || [])
+    .filter(s=>s.active && s.department===dept && s.section)
+    .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0) || String(a.section||"").localeCompare(String(b.section||""),"ar"))
+    .map(s=>String(s.section))
+    .filter(section=>{
+      if(seen.has(section)) return false;
+      seen.add(section);
+      return true;
+    })
+    .map(section=>({value:section,label:sectionLabel(section)}));
+}
+
+function populateStaffSectionSelect(dept,selectId,wrapId,selectedValue=""){
+  const select=document.getElementById(selectId);
+  const wrap=document.getElementById(wrapId);
+  if(!select || !wrap) return [];
+
+  const options=sectionOptionsForDepartment(dept);
+  select.innerHTML=`<option value="">اختر القسم</option>` +
+    options.map(o=>`<option value="${o.value}">${o.label}</option>`).join("");
+
+  if(selectedValue && [...select.options].some(o=>o.value===selectedValue)){
+    select.value=selectedValue;
+  }
+
+  wrap.classList.toggle("hidden",options.length===0);
+  if(!options.length) select.value="";
+  return options;
 }
 
 function serviceRouteRule(dept,section){
@@ -5914,14 +6012,33 @@ function renderPermissionBuilder(){
   const collegesWrap=document.getElementById("permCollegesWrap");
   const rangesWrap=document.getElementById("permRangesWrap");
 
-  if(dept==="graduates") sectionWrap.classList.remove("hidden");
-  else{
+  const sections=sectionOptionsForDepartment(dept);
+  const previousSection=sectionEl.value;
+
+  sectionEl.innerHTML=`<option value="">اختر القسم</option>` +
+    sections.map(o=>`<option value="${o.value}">${o.label}</option>`).join("");
+
+  if(sections.length){
+    sectionWrap.classList.remove("hidden");
+
+    // If this user's main assignment is this department + section,
+    // default the permission builder to that section.
+    const preferred=
+      selectedPermissionUser?.department===dept
+        ? selectedPermissionUser?.section
+        : null;
+
+    const wanted=preferred || previousSection;
+    if(wanted && [...sectionEl.options].some(o=>o.value===wanted)){
+      sectionEl.value=wanted;
+    }
+  }else{
     sectionWrap.classList.add("hidden");
     sectionEl.value="";
   }
 
-  const section=dept==="graduates" ? sectionEl.value : null;
-  if(!dept || (dept==="graduates" && !section)){
+  const section=sections.length ? sectionEl.value : null;
+  if(!dept || (sections.length && !section)){
     servicesWrap.classList.add("hidden");
     collegesWrap.classList.add("hidden");
     rangesWrap.classList.add("hidden");
@@ -6019,11 +6136,12 @@ async function addSelectedPermissions(){
   if(!selectedPermissionUser) return;
 
   const dept=document.getElementById("permDept").value;
-  const section=dept==="graduates" ? document.getElementById("permSection").value : null;
+  const sectionOptions=sectionOptionsForDepartment(dept);
+  const section=sectionOptions.length ? document.getElementById("permSection").value : null;
   const selectedServices=[...document.querySelectorAll(".perm-service:checked")];
   const msg=document.getElementById("permissionAdminMessage");
 
-  if(!dept || (dept==="graduates" && !section) || !selectedServices.length){
+  if(!dept || (sectionOptions.length && !section) || !selectedServices.length){
     msg.textContent="يرجى اختيار الإدارة والقسم - عند الحاجة - وخدمة واحدة على الأقل.";
     msg.classList.remove("hidden");
     return;
@@ -6584,7 +6702,7 @@ async function loadAdminUsers(){
 
   const { data, error } = await supabaseClient
     .from("profiles")
-    .select("id,username,full_name,role,department,active,created_at")
+    .select("id,username,full_name,role,department,section,active,created_at")
     .order("full_name",{ascending:true});
 
   if(error){
@@ -6629,7 +6747,10 @@ function renderAdminUsers(){
     <tr>
       <td style="padding:12px;border-bottom:1px solid var(--border)"><b>${u.full_name || "—"}</b></td>
       <td style="padding:12px;border-bottom:1px solid var(--border)" dir="ltr">${u.username || "—"}</td>
-      <td style="padding:12px;border-bottom:1px solid var(--border)">${departmentLabel(u.department)}</td>
+      <td style="padding:12px;border-bottom:1px solid var(--border)">
+        ${departmentLabel(u.department)}
+        ${u.section ? `<div class="muted" style="margin-top:3px">${sectionLabel(u.section)}</div>` : ""}
+      </td>
       <td style="padding:12px;border-bottom:1px solid var(--border)">
         <span class="tag">${u.role==="superuser" ? "مدير النظام" : "موظف"}</span>
       </td>
@@ -6668,12 +6789,13 @@ function closeManageUserPanel(){
   resetManageUserPanel();
 }
 
-function openEditUser(id){
+async function openEditUser(id){
   const u=getAdminUserById(id);
   if(!u) return;
 
   selectedManagedUser=u;
   resetManageUserPanel();
+  await loadServiceCatalog();
 
   document.getElementById("manageUserTitle").textContent="تعديل المستخدم";
   document.getElementById("manageUserSubtitle").textContent=u.full_name || u.username || "";
@@ -6681,7 +6803,11 @@ function openEditUser(id){
   document.getElementById("editStaffUsername").value=u.username || "";
   document.getElementById("editStaffRole").value=u.role || "staff";
   document.getElementById("editStaffDepartment").value=u.department || "";
+  document.getElementById("editStaffSection").value="";
   updateEditDepartmentState();
+  if(u.section && [...document.getElementById("editStaffSection").options].some(o=>o.value===u.section)){
+    document.getElementById("editStaffSection").value=u.section;
+  }
 
   document.getElementById("editUserFields").classList.remove("hidden");
   document.getElementById("manageUserPanel").classList.remove("hidden");
@@ -6707,12 +6833,24 @@ function openPasswordReset(id){
 function updateEditDepartmentState(){
   const role=document.getElementById("editStaffRole").value;
   const dept=document.getElementById("editStaffDepartment");
+  const section=document.getElementById("editStaffSection");
+  const sectionWrap=document.getElementById("editStaffSectionWrap");
+
   if(role==="superuser"){
     dept.value="";
     dept.disabled=true;
-  }else{
-    dept.disabled=false;
+    if(section) section.value="";
+    if(sectionWrap) sectionWrap.classList.add("hidden");
+    return;
   }
+
+  dept.disabled=false;
+  populateStaffSectionSelect(
+    dept.value,
+    "editStaffSection",
+    "editStaffSectionWrap",
+    section?.value || selectedManagedUser?.section || ""
+  );
 }
 
 async function invokeManageStaff(body){
@@ -6743,6 +6881,8 @@ async function saveEditedUser(){
   const username=document.getElementById("editStaffUsername").value.trim();
   const role=document.getElementById("editStaffRole").value;
   const department=document.getElementById("editStaffDepartment").value || null;
+  const section=document.getElementById("editStaffSection")?.value || null;
+  const departmentSections=sectionOptionsForDepartment(department);
   const msg=document.getElementById("manageUserMessage");
   const btn=document.getElementById("saveEditUserBtn");
 
@@ -6754,6 +6894,12 @@ async function saveEditedUser(){
 
   if(role==="staff" && !department){
     msg.textContent="يرجى تحديد الإدارة للموظف.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  if(role==="staff" && departmentSections.length && !section){
+    msg.textContent="يرجى تحديد القسم للموظف.";
     msg.classList.remove("hidden");
     return;
   }
@@ -6771,6 +6917,12 @@ async function saveEditedUser(){
       role,
       department
     });
+
+    const {error:sectionSaveError}=await supabaseClient.rpc("set_staff_home_section",{
+      p_user_id:selectedManagedUser.id,
+      p_section:role==="staff" ? section : null
+    });
+    if(sectionSaveError) throw sectionSaveError;
 
     msg.textContent=data?.message || "تم تحديث بيانات المستخدم بنجاح.";
     msg.classList.remove("hidden");
@@ -6868,14 +7020,16 @@ async function toggleUserStatus(id, newActive){
   }
 }
 
-function openAddUserForm(){
+async function openAddUserForm(){
   if(!staff || staff.role!=="superuser"){
     alert("هذه الخاصية متاحة لمدير النظام فقط.");
     return;
   }
 
+  await loadServiceCatalog();
   document.getElementById("addUserPanel").classList.remove("hidden");
   document.getElementById("addUserMessage").classList.add("hidden");
+  updateNewUserDepartmentState();
   document.getElementById("newStaffFullName").focus();
 }
 
@@ -6887,10 +7041,19 @@ function closeAddUserForm(){
 function updateNewUserDepartmentState(){
   const role=document.getElementById("newStaffRole").value;
   const dept=document.getElementById("newStaffDepartment");
+  const section=document.getElementById("newStaffSection");
+  const sectionWrap=document.getElementById("newStaffSectionWrap");
 
   if(role==="superuser"){
     dept.value="";
+    dept.disabled=true;
+    if(section) section.value="";
+    if(sectionWrap) sectionWrap.classList.add("hidden");
+    return;
   }
+
+  dept.disabled=false;
+  populateStaffSectionSelect(dept.value,"newStaffSection","newStaffSectionWrap",section?.value || "");
 }
 
 async function createStaffUser(){
@@ -6905,6 +7068,8 @@ async function createStaffUser(){
   const password=document.getElementById("newStaffPassword").value;
   const role=document.getElementById("newStaffRole").value;
   const department=document.getElementById("newStaffDepartment").value || null;
+  const section=document.getElementById("newStaffSection")?.value || null;
+  const departmentSections=sectionOptionsForDepartment(department);
 
   const msg=document.getElementById("addUserMessage");
   const btn=document.getElementById("createStaffBtn");
@@ -6923,6 +7088,12 @@ async function createStaffUser(){
 
   if(role==="staff" && !department){
     msg.textContent="يرجى تحديد الإدارة للموظف.";
+    msg.classList.remove("hidden");
+    return;
+  }
+
+  if(role==="staff" && departmentSections.length && !section){
+    msg.textContent="يرجى تحديد القسم للموظف.";
     msg.classList.remove("hidden");
     return;
   }
@@ -7005,6 +7176,35 @@ async function createStaffUser(){
       return;
     }
 
+    // Store the employee's optional home section separately from Auth creation.
+    // This keeps the existing Edge Function unchanged.
+    const {data:newProfile,error:newProfileError}=await supabaseClient
+      .from("profiles")
+      .select("id")
+      .eq("username",username)
+      .single();
+
+    if(newProfileError || !newProfile?.id){
+      console.error("Created user profile lookup failed:",newProfileError);
+      msg.textContent="تم إنشاء المستخدم، لكن تعذر حفظ القسم. يرجى فتح «تعديل» وحفظ القسم مرة أخرى.";
+      msg.classList.remove("hidden");
+      await loadAdminUsers();
+      return;
+    }
+
+    const {error:sectionSaveError}=await supabaseClient.rpc("set_staff_home_section",{
+      p_user_id:newProfile.id,
+      p_section:role==="staff" ? section : null
+    });
+
+    if(sectionSaveError){
+      console.error("Could not save staff section:",sectionSaveError);
+      msg.textContent="تم إنشاء المستخدم، لكن تعذر حفظ القسم. يرجى تشغيل ملف SQL الخاص بالأقسام ثم إعادة تعديل المستخدم.";
+      msg.classList.remove("hidden");
+      await loadAdminUsers();
+      return;
+    }
+
     msg.textContent="تم إنشاء المستخدم بنجاح.";
     msg.classList.remove("hidden");
 
@@ -7014,6 +7214,8 @@ async function createStaffUser(){
     document.getElementById("newStaffPassword").value="";
     document.getElementById("newStaffRole").value="staff";
     document.getElementById("newStaffDepartment").value="";
+    document.getElementById("newStaffSection").value="";
+    document.getElementById("newStaffSectionWrap").classList.add("hidden");
 
     await loadAdminUsers();
 
