@@ -3437,18 +3437,75 @@ async function loadAvailableWorkCounters(){
   return true;
 }
 
+
+function locationAllowsPermissionKey(location,key){
+  if(!location || !key) return false;
+
+  const route=parsePermissionRoute(key);
+  const locationDepartments=new Set(locationDepartmentSlugsForStaff(location));
+
+  if(!locationDepartments.has(route.dept)) return false;
+
+  // If this location has an explicit section-visibility configuration
+  // for the route's department, respect it for staff location eligibility too.
+  // If no section rows exist, preserve the historical "all sections" behavior.
+  if(route.section){
+    const sectionRows=(location.service_location_visible_sections || [])
+      .filter(x=>x.department===route.dept && x.section);
+
+    if(sectionRows.length){
+      const allowedSections=new Set(sectionRows.map(x=>x.section));
+      if(!allowedSections.has(route.section)) return false;
+    }
+  }
+
+  return true;
+}
+
+function staffLocationHasAuthorizedRoute(location){
+  if(!staff || !location) return false;
+
+  // System administrators may work from any configured location.
+  if(staff.role==="superuser") return true;
+
+  const permissions=uniquePermissionRouteKeys(
+    staff.centralPermissions || staff.permissions || []
+  );
+
+  return permissions.some(key=>locationAllowsPermissionKey(location,key));
+}
+
 function populateStaffDisplayDestinations(){
   const el=document.getElementById("staffDisplayDestination");
   if(!el) return;
 
   const current=staff?.locationSlug || el.value;
-  const activeLocations=(serviceLocations || []).filter(l=>l.active && l.display_configs?.active);
+
+  const activeLocations=(serviceLocations || [])
+    .filter(l=>l.active && l.display_configs?.active)
+    .filter(l=>staffLocationHasAuthorizedRoute(l));
 
   el.innerHTML=`<option value="">اختر موقع الخدمة</option>` +
     activeLocations.map(l=>`<option value="${l.slug}">${l.name}</option>`).join("");
 
   if([...el.options].some(o=>o.value===current)){
     el.value=current;
+  }else{
+    el.value="";
+
+    // Do not retain a stale location that is outside the employee's permissions.
+    if(staff && staff.role!=="superuser"){
+      staff.locationId=null;
+      staff.locationSlug="";
+      staff.locationName="";
+      staff.locationDepartments=[];
+      staff.counterId=null;
+      staff.counter="";
+      staff.hallId=null;
+      staff.hallName="";
+      staff.hallSlug="";
+      staff.activePermissions=[];
+    }
   }
 
   staffDisplayDestinationChanged();
@@ -3550,6 +3607,12 @@ async function applyStaffWorkstation(){
   const location=selectedStaffLocation();
   if(!location){
     alert("يرجى اختيار موقع الخدمة.");
+    return;
+  }
+
+  if(!staffLocationHasAuthorizedRoute(location)){
+    alert("هذا الموقع لا يحتوي على قوائم انتظار مصرح بها لهذا الموظف.");
+    populateStaffDisplayDestinations();
     return;
   }
 
