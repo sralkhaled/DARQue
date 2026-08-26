@@ -2120,7 +2120,7 @@ async function fetchCentralPermissions(userId,homeDepartment=null,homeSection=nu
     return true;
   });
 
-  return scopedRows.map(p=>{
+  return uniquePermissionRouteKeys(scopedRows.map(p=>{
     const serviceName=p.service_catalog?.service_name;
     if(!serviceName) return null;
     let key=p.department;
@@ -2129,7 +2129,7 @@ async function fetchCentralPermissions(userId,homeDepartment=null,homeSection=nu
     if(p.college) key+=`|${p.college}`;
     if(p.letter_range) key+=`|${p.letter_range}`;
     return key;
-  }).filter(Boolean);
+  }).filter(Boolean));
 }
 
 async function refreshStaffPermissions(){
@@ -3623,10 +3623,10 @@ async function applyStaffWorkstation(){
     ? centralRouteKeysForDepartments(staff.locationDepartments)
     : (staff.centralPermissions || []);
 
-  const allowedAtLocation=permissionSource.filter(key=>{
+  const allowedAtLocation=uniquePermissionRouteKeys(permissionSource.filter(key=>{
     const dept=String(key||"").split("|")[0];
     return staff.locationDepartments.includes(dept);
-  });
+  }));
   const previous=staff.activePermissions || [];
   staff.activePermissions=previous.filter(k=>allowedAtLocation.includes(k));
   if(!staff.activePermissions.length){
@@ -3639,6 +3639,10 @@ async function applyStaffWorkstation(){
   await refreshStaff();
 }
 
+
+function uniquePermissionRouteKeys(keys){
+  return [...new Set((keys || []).filter(Boolean).map(k=>String(k)))];
+}
 
 function parsePermissionRoute(key){
   const parts=String(key||"").split("|");
@@ -3726,10 +3730,10 @@ function renderAuthorizedQueueSelector(){
     return;
   }
 
-  const locationAllowed=central.filter(key=>{
+  const locationAllowed=uniquePermissionRouteKeys(central.filter(key=>{
     const dept=String(key||"").split("|")[0];
     return (staff.locationDepartments || []).includes(dept);
-  });
+  }));
   const active=staff.activePermissions || locationAllowed;
 
   if(!locationAllowed.length){
