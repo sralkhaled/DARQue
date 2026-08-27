@@ -3223,24 +3223,6 @@ async function guidedPrintQr(){
 <\/script>
 
 
-
-
-
-<div id="staffManualWelcomeOverlay" role="dialog" aria-modal="true" aria-labelledby="staffManualWelcomeTitle">
-  <div id="staffManualWelcomeDialog">
-    <h3 id="staffManualWelcomeTitle">مرحباً بك في نظام الكاونتر</h3>
-    <p>للتعرف على خطوات إعداد الكاونتر واختيار قوائم الانتظار وإدارة أدوار المراجعين، يمكنك الاطلاع على دليل المستخدم.</p>
-    <label class="manual-dialog-checkbox">
-      <input id="staffManualDontShowAgain" type="checkbox" />
-      <span>عدم إظهار هذه الرسالة مرة أخرى</span>
-    </label>
-    <div class="manual-dialog-actions">
-      <a class="btn primary" href="https://www.dropbox.com/scl/fi/wxpggcqy8bsbap3bbxe41/DARQue_Staff_User_Manual_KU.pdf?rlkey=oebylax3ibfb1bgsafow33nj0&raw=1" target="_blank" rel="noopener noreferrer" style="text-decoration:none">فتح دليل المستخدم</a>
-      <button class="btn" type="button" onclick="closeStaffManualWelcome()">متابعة</button>
-    </div>
-  </div>
-</div>
-
 </body>
 </html>`);
     printWindow.document.close();
@@ -7662,5 +7644,22 @@ async function handleRecoveryMode(){
   }
 })();
 </script>
+
+
+<div id="staffManualWelcomeOverlay" role="dialog" aria-modal="true" aria-labelledby="staffManualWelcomeTitle">
+  <div id="staffManualWelcomeDialog">
+    <h3 id="staffManualWelcomeTitle">مرحباً بك في نظام الكاونتر</h3>
+    <p>للتعرف على خطوات إعداد الكاونتر واختيار قوائم الانتظار وإدارة أدوار المراجعين، يمكنك الاطلاع على دليل المستخدم.</p>
+    <label class="manual-dialog-checkbox">
+      <input id="staffManualDontShowAgain" type="checkbox" />
+      <span>عدم إظهار هذه الرسالة مرة أخرى</span>
+    </label>
+    <div class="manual-dialog-actions">
+      <a class="btn primary" href="https://www.dropbox.com/scl/fi/wxpggcqy8bsbap3bbxe41/DARQue_Staff_User_Manual_KU.pdf?rlkey=oebylax3ibfb1bgsafow33nj0&raw=1" target="_blank" rel="noopener noreferrer" style="text-decoration:none">فتح دليل المستخدم</a>
+      <button class="btn" type="button" onclick="closeStaffManualWelcome()">متابعة</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
