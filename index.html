@@ -3151,6 +3151,26 @@ async function guidedPrintQr(){
   @media print{
     .sheet{page-break-inside:avoid}
   }
+
+    /* Hierarchical staff queue selector: service → college → letter range */
+    #authorizedQueueSelector{display:grid;gap:10px}
+    .queue-hierarchy-simple,.queue-service-group{border:1px solid var(--border);border-radius:14px;background:#fff;overflow:hidden}
+    .queue-hierarchy-line{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer}
+    .queue-hierarchy-title{font-weight:800;line-height:1.5}
+    .queue-service-group>summary{list-style:none;display:flex;align-items:center;gap:10px;padding:13px 14px;cursor:pointer;user-select:none}
+    .queue-service-group>summary::-webkit-details-marker{display:none}
+    .queue-service-group>summary::before{content:"▸";font-size:16px;color:var(--muted);transition:transform .15s ease}
+    .queue-service-group[open]>summary::before{transform:rotate(90deg)}
+    .queue-hierarchy-count{margin-inline-start:auto;font-size:12px;color:var(--muted);white-space:nowrap}
+    .queue-service-children{border-top:1px solid var(--border);padding:10px 12px 12px;background:#fafbfc}
+    .queue-select-all-within{display:flex;align-items:center;gap:8px;padding:6px 4px 10px;font-size:13px;font-weight:700}
+    .queue-college-group{border-top:1px solid var(--border);padding-top:4px;margin-top:4px}
+    .queue-college-head{font-weight:700;padding:9px 6px 7px}
+    .queue-hierarchy-college-leaf{padding:9px 6px;border-top:1px solid var(--border)}
+    .queue-range-grid{display:flex;flex-wrap:wrap;gap:8px;padding:0 28px 10px 0}
+    .queue-range-chip{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid var(--border);border-radius:999px;background:#fff;cursor:pointer;font-size:13px}
+    .queue-range-chip:has(input:checked){font-weight:700}
+    @media(max-width:700px){.queue-range-grid{padding-right:10px}.queue-service-group>summary{padding:12px 10px}.queue-hierarchy-count{font-size:11px}}
 </style>
 </head>
 <body>
@@ -3811,22 +3831,153 @@ function renderAuthorizedQueueSelector(){
     return;
   }
 
-  box.innerHTML=locationAllowed.map((key,i)=>`
-    <label class="check">
-      <input type="checkbox"
-             class="authorized-queue"
-             value="${encodeURIComponent(key)}"
-             ${active.includes(key)?"checked":""}
-             onchange="syncAuthorizedQueueSelectAll()">
-      <span>${authorizedQueueCardLabel(key)}</span>
-    </label>
-  `).join("");
+  // Present operational queue selection as:
+  // service → college → letter range, while keeping the exact route keys underneath.
+  const routeRows=locationAllowed.map(key=>({key,...parsePermissionRoute(key)}));
+  const serviceGroups=[];
+  const serviceMap=new Map();
+
+  routeRows.forEach(row=>{
+    const groupKey=[row.dept,row.section||"",row.service].join("|");
+    if(!serviceMap.has(groupKey)){
+      const group={groupKey,dept:row.dept,section:row.section,service:row.service,rows:[]};
+      serviceMap.set(groupKey,group);
+      serviceGroups.push(group);
+    }
+    serviceMap.get(groupKey).rows.push(row);
+  });
+
+  box.innerHTML=serviceGroups.map((group,serviceIndex)=>{
+    const rows=group.rows;
+    const activeCount=rows.filter(r=>active.includes(r.key)).length;
+    const hasCollege=rows.some(r=>r.college);
+
+    // A service without college/range routing stays as one simple checkbox.
+    if(!hasCollege && rows.length===1){
+      const row=rows[0];
+      return `
+        <div class="queue-hierarchy-simple">
+          <label class="queue-hierarchy-line">
+            <input type="checkbox" class="authorized-queue"
+                   value="${encodeURIComponent(row.key)}"
+                   ${active.includes(row.key)?"checked":""}
+                   onchange="syncAuthorizedQueueSelectAll()">
+            <span class="queue-hierarchy-title">${escapeHtml(group.service || "الخدمة")}</span>
+          </label>
+        </div>`;
+    }
+
+    const colleges=[];
+    const collegeMap=new Map();
+    rows.forEach(row=>{
+      const college=row.college || "__no_college__";
+      if(!collegeMap.has(college)){
+        const item={college:row.college,rows:[]};
+        collegeMap.set(college,item);
+        colleges.push(item);
+      }
+      collegeMap.get(college).rows.push(row);
+    });
+
+    const collegeHtml=colleges.map((collegeGroup,collegeIndex)=>{
+      const crows=collegeGroup.rows;
+      const collegeLabel=collegeGroup.college || "الخدمة";
+      const hasRanges=crows.some(r=>r.range);
+
+      if(!hasRanges && crows.length===1){
+        const row=crows[0];
+        return `
+          <label class="queue-hierarchy-line queue-hierarchy-college-leaf">
+            <input type="checkbox" class="authorized-queue"
+                   data-service-group="${serviceIndex}"
+                   value="${encodeURIComponent(row.key)}"
+                   ${active.includes(row.key)?"checked":""}
+                   onchange="syncAuthorizedQueueSelectAll()">
+            <span>${escapeHtml(collegeLabel)}</span>
+          </label>`;
+      }
+
+      const rangeHtml=crows.map(row=>`
+        <label class="queue-range-chip">
+          <input type="checkbox" class="authorized-queue"
+                 data-service-group="${serviceIndex}"
+                 data-college-group="${serviceIndex}-${collegeIndex}"
+                 value="${encodeURIComponent(row.key)}"
+                 ${active.includes(row.key)?"checked":""}
+                 onchange="syncAuthorizedQueueSelectAll()">
+          <span>${escapeHtml(row.range ? row.range : "كامل الكلية")}</span>
+        </label>`).join("");
+
+      return `
+        <div class="queue-college-group">
+          <label class="queue-hierarchy-line queue-college-head">
+            <input type="checkbox" class="queue-college-parent"
+                   data-college-group="${serviceIndex}-${collegeIndex}"
+                   onchange="toggleQueueCollegeGroup('${serviceIndex}-${collegeIndex}',this.checked)">
+            <span>${escapeHtml(collegeLabel)}</span>
+          </label>
+          <div class="queue-range-grid">${rangeHtml}</div>
+        </div>`;
+    }).join("");
+
+    return `
+      <details class="queue-service-group" data-service-index="${serviceIndex}">
+        <summary>
+          <input type="checkbox" class="queue-service-parent"
+                 data-service-group="${serviceIndex}"
+                 onclick="event.stopPropagation()"
+                 onchange="toggleQueueServiceGroup('${serviceIndex}',this.checked)">
+          <span class="queue-hierarchy-title">${escapeHtml(group.service || "الخدمة")}</span>
+          <span class="queue-hierarchy-count">${activeCount} من ${rows.length}</span>
+        </summary>
+        <div class="queue-service-children">
+          <label class="queue-select-all-within">
+            <input type="checkbox" class="queue-service-parent-secondary"
+                   data-service-group="${serviceIndex}"
+                   onchange="toggleQueueServiceGroup('${serviceIndex}',this.checked)">
+            <span>تحديد الخدمة بالكامل</span>
+          </label>
+          ${collegeHtml}
+        </div>
+      </details>`;
+  }).join("");
 
   syncAuthorizedQueueSelectAll();
   renderActiveQueueSummary();
 }
 
+function setCheckboxStateFromChildren(parent,children){
+  if(!parent) return;
+  const checked=children.filter(x=>x.checked).length;
+  parent.checked=children.length>0 && checked===children.length;
+  parent.indeterminate=checked>0 && checked<children.length;
+}
+
+function syncQueueHierarchyParents(){
+  document.querySelectorAll(".queue-college-parent").forEach(parent=>{
+    const key=parent.dataset.collegeGroup;
+    const children=[...document.querySelectorAll(`.authorized-queue[data-college-group="${key}"]`)];
+    setCheckboxStateFromChildren(parent,children);
+  });
+
+  document.querySelectorAll(".queue-service-parent").forEach(parent=>{
+    const key=parent.dataset.serviceGroup;
+    const children=[...document.querySelectorAll(`.authorized-queue[data-service-group="${key}"]`)];
+    setCheckboxStateFromChildren(parent,children);
+    const secondary=document.querySelector(`.queue-service-parent-secondary[data-service-group="${key}"]`);
+    setCheckboxStateFromChildren(secondary,children);
+
+    const details=parent.closest("details.queue-service-group");
+    const counter=details?.querySelector(".queue-hierarchy-count");
+    if(counter){
+      const checked=children.filter(x=>x.checked).length;
+      counter.textContent=`${checked} من ${children.length}`;
+    }
+  });
+}
+
 function syncAuthorizedQueueSelectAll(){
+  syncQueueHierarchyParents();
   const all=[...document.querySelectorAll(".authorized-queue")];
   const checked=all.filter(x=>x.checked);
   const selectAll=document.getElementById("selectAllAuthorizedQueues");
@@ -3834,6 +3985,16 @@ function syncAuthorizedQueueSelectAll(){
     selectAll.checked=all.length>0 && checked.length===all.length;
     selectAll.indeterminate=checked.length>0 && checked.length<all.length;
   }
+}
+
+function toggleQueueServiceGroup(serviceGroup,checked){
+  document.querySelectorAll(`.authorized-queue[data-service-group="${serviceGroup}"]`).forEach(x=>x.checked=checked);
+  syncAuthorizedQueueSelectAll();
+}
+
+function toggleQueueCollegeGroup(collegeGroup,checked){
+  document.querySelectorAll(`.authorized-queue[data-college-group="${collegeGroup}"]`).forEach(x=>x.checked=checked);
+  syncAuthorizedQueueSelectAll();
 }
 
 function toggleAllAuthorizedQueues(checked){
