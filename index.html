@@ -239,27 +239,35 @@
   }
 
 
-  /* Staff user manual welcome modal */
-  .manual-modal-backdrop{
-    position:fixed;inset:0;background:rgba(15,23,42,.42);z-index:9999;
-    display:flex;align-items:center;justify-content:center;padding:18px;
-  }
-  .manual-modal{
-    width:min(560px,100%);background:#fff;border:1px solid var(--border);
-    border-radius:22px;box-shadow:0 24px 70px rgba(15,23,42,.22);padding:26px;
-    text-align:right;direction:rtl;
-  }
-  .manual-modal h3{margin:0 0 10px;font-size:25px;color:var(--text)}
-  .manual-modal p{margin:0;color:var(--muted);line-height:1.9;font-size:16px}
-  .manual-modal-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
-  .manual-modal-actions .btn{min-width:145px}
-  .manual-modal-remember{display:flex;align-items:center;gap:8px;margin-top:16px;color:var(--muted);font-size:14px;cursor:pointer}
-  .manual-modal-remember input{width:18px;height:18px;margin:0}
-  @media(max-width:520px){
-    .manual-modal{padding:22px 18px;border-radius:18px}
-    .manual-modal-actions{display:grid;grid-template-columns:1fr}
-    .manual-modal-actions .btn{width:100%}
-  }
+
+
+/* Staff user-manual welcome dialog */
+#staffManualWelcomeOverlay{
+  position:fixed;
+  inset:0;
+  z-index:10000;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+  background:rgba(15,23,42,.42);
+  backdrop-filter:blur(2px);
+}
+#staffManualWelcomeDialog{
+  width:min(560px,100%);
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:20px;
+  box-shadow:0 24px 70px rgba(15,23,42,.22);
+  padding:26px;
+  direction:rtl;
+  text-align:right;
+}
+#staffManualWelcomeDialog h3{margin:0 0 10px;font-size:1.45rem;color:var(--text)}
+#staffManualWelcomeDialog p{margin:0 0 18px;line-height:1.85;color:var(--muted)}
+#staffManualWelcomeDialog .manual-dialog-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+#staffManualWelcomeDialog .manual-dialog-checkbox{display:flex;align-items:center;gap:8px;margin-top:14px;color:var(--muted);font-size:.95rem}
+#staffManualWelcomeDialog .manual-dialog-checkbox input{width:18px;height:18px}
 
 </style>
 </head>
@@ -337,6 +345,10 @@
         <div class="card">
           <h3 class="section-title">إعداد الكاونتر</h3>
           <div id="staffIdentity" class="notice"></div>
+          <div id="staffManualNotice" class="notice hidden" style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+            <span>للاطلاع على خطوات استخدام نظام الكاونتر، يمكنك الرجوع إلى دليل المستخدم عند الحاجة.</span>
+            <a class="btn" href="https://www.dropbox.com/scl/fi/wxpggcqy8bsbap3bbxe41/DARQue_Staff_User_Manual_KU.pdf?rlkey=oebylax3ibfb1bgsafow33nj0&raw=1" target="_blank" rel="noopener noreferrer" style="text-decoration:none">فتح دليل المستخدم</a>
+          </div>
           <div id="superuserQuickAccess" class="hidden" style="margin-bottom:14px">
             <button class="btn primary" onclick="showView('admin')">مدير النظام</button>
           </div>
@@ -3210,18 +3222,22 @@ async function guidedPrintQr(){
   window.addEventListener("load",()=>setTimeout(()=>window.print(),250));
 <\/script>
 
-<div id="staffManualModal" class="manual-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="staffManualModalTitle">
-  <div class="manual-modal">
-    <h3 id="staffManualModalTitle">مرحباً بك في نظام الكاونتر</h3>
+
+
+
+
+<div id="staffManualWelcomeOverlay" role="dialog" aria-modal="true" aria-labelledby="staffManualWelcomeTitle">
+  <div id="staffManualWelcomeDialog">
+    <h3 id="staffManualWelcomeTitle">مرحباً بك في نظام الكاونتر</h3>
     <p>للتعرف على خطوات إعداد الكاونتر واختيار قوائم الانتظار وإدارة أدوار المراجعين، يمكنك الاطلاع على دليل المستخدم.</p>
-    <div class="manual-modal-actions">
-      <button class="btn primary" type="button" onclick="openStaffUserManual()">فتح دليل المستخدم</button>
-      <button class="btn" type="button" onclick="closeStaffUserManual()">متابعة</button>
-    </div>
-    <label class="manual-modal-remember">
+    <label class="manual-dialog-checkbox">
       <input id="staffManualDontShowAgain" type="checkbox" />
       <span>عدم إظهار هذه الرسالة مرة أخرى</span>
     </label>
+    <div class="manual-dialog-actions">
+      <a class="btn primary" href="https://www.dropbox.com/scl/fi/wxpggcqy8bsbap3bbxe41/DARQue_Staff_User_Manual_KU.pdf?rlkey=oebylax3ibfb1bgsafow33nj0&raw=1" target="_blank" rel="noopener noreferrer" style="text-decoration:none">فتح دليل المستخدم</a>
+      <button class="btn" type="button" onclick="closeStaffManualWelcome()">متابعة</button>
+    </div>
   </div>
 </div>
 
@@ -3342,42 +3358,39 @@ function showRequiredPasswordChange(userId){
 
 const STAFF_USER_MANUAL_URL = "https://www.dropbox.com/scl/fi/wxpggcqy8bsbap3bbxe41/DARQue_Staff_User_Manual_KU.pdf?rlkey=oebylax3ibfb1bgsafow33nj0&raw=1";
 
-function staffManualStorageKey(){
-  return staff?.userId ? `darque_staff_manual_hidden_${staff.userId}` : "darque_staff_manual_hidden";
+
+function staffManualDismissKey(){
+  return staff?.userId ? `darque_staff_manual_dismissed_${staff.userId}` : null;
 }
 
-function maybeShowStaffUserManual(){
-  if(!staff || staff.role !== "staff") return;
-  try{
-    if(localStorage.getItem(staffManualStorageKey()) === "1") return;
-  }catch(e){
-    console.warn("Could not read staff manual preference:",e);
-  }
-  const modal=document.getElementById("staffManualModal");
+function showStaffManualWelcome(){
+  if(!staff || staff.role!=="staff") return;
+  const key=staffManualDismissKey();
+  if(key && localStorage.getItem(key)==="1") return;
+  const overlay=document.getElementById("staffManualWelcomeOverlay");
   const checkbox=document.getElementById("staffManualDontShowAgain");
   if(checkbox) checkbox.checked=false;
-  modal?.classList.remove("hidden");
-}
-
-function rememberStaffManualPreference(){
-  const checkbox=document.getElementById("staffManualDontShowAgain");
-  if(!checkbox?.checked) return;
-  try{
-    localStorage.setItem(staffManualStorageKey(),"1");
-  }catch(e){
-    console.warn("Could not save staff manual preference:",e);
+  if(overlay){
+    overlay.style.display="flex";
+    document.body.style.overflow="hidden";
   }
 }
 
-function closeStaffUserManual(){
-  rememberStaffManualPreference();
-  document.getElementById("staffManualModal")?.classList.add("hidden");
+function closeStaffManualWelcome(){
+  const checkbox=document.getElementById("staffManualDontShowAgain");
+  const key=staffManualDismissKey();
+  if(checkbox?.checked && key){
+    localStorage.setItem(key,"1");
+  }
+  const overlay=document.getElementById("staffManualWelcomeOverlay");
+  if(overlay) overlay.style.display="none";
+  document.body.style.overflow="";
 }
 
-function openStaffUserManual(){
-  rememberStaffManualPreference();
-  window.open(STAFF_USER_MANUAL_URL,"_blank","noopener,noreferrer");
-  document.getElementById("staffManualModal")?.classList.add("hidden");
+function updateStaffManualNotice(){
+  const notice=document.getElementById("staffManualNotice");
+  if(!notice) return;
+  notice.classList.toggle("hidden", !(staff && staff.role === "staff"));
 }
 
 async function staffLogin(){
@@ -3493,7 +3506,8 @@ async function staffLogin(){
 
   document.querySelector(".nav")?.classList.add("hidden");
   document.getElementById("staffPanel").classList.remove("hidden");
-  maybeShowStaffUserManual();
+  updateStaffManualNotice();
+  setTimeout(showStaffManualWelcome, 80);
   await loadHallsAndDisplays();
   await loadServiceLocations();
   await loadAvailableWorkCounters();
@@ -3512,7 +3526,7 @@ async function staffLogout(){
   stopStaffPresenceHeartbeat();
   stopOversightAutoRefresh();
   await supabaseClient.auth.signOut();
-  document.getElementById("staffManualModal")?.classList.add("hidden");
+  document.getElementById("staffManualNotice")?.classList.add("hidden");
   staff=null;
   current=null;
   document.getElementById("adminNavBtn").classList.add("hidden");
