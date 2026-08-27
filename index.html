@@ -238,6 +238,29 @@
     #reportContent{display:block!important}
   }
 
+
+  /* Staff user manual welcome modal */
+  .manual-modal-backdrop{
+    position:fixed;inset:0;background:rgba(15,23,42,.42);z-index:9999;
+    display:flex;align-items:center;justify-content:center;padding:18px;
+  }
+  .manual-modal{
+    width:min(560px,100%);background:#fff;border:1px solid var(--border);
+    border-radius:22px;box-shadow:0 24px 70px rgba(15,23,42,.22);padding:26px;
+    text-align:right;direction:rtl;
+  }
+  .manual-modal h3{margin:0 0 10px;font-size:25px;color:var(--text)}
+  .manual-modal p{margin:0;color:var(--muted);line-height:1.9;font-size:16px}
+  .manual-modal-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+  .manual-modal-actions .btn{min-width:145px}
+  .manual-modal-remember{display:flex;align-items:center;gap:8px;margin-top:16px;color:var(--muted);font-size:14px;cursor:pointer}
+  .manual-modal-remember input{width:18px;height:18px;margin:0}
+  @media(max-width:520px){
+    .manual-modal{padding:22px 18px;border-radius:18px}
+    .manual-modal-actions{display:grid;grid-template-columns:1fr}
+    .manual-modal-actions .btn{width:100%}
+  }
+
 </style>
 </head>
 <body>
@@ -3186,6 +3209,22 @@ async function guidedPrintQr(){
 <script>
   window.addEventListener("load",()=>setTimeout(()=>window.print(),250));
 <\/script>
+
+<div id="staffManualModal" class="manual-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="staffManualModalTitle">
+  <div class="manual-modal">
+    <h3 id="staffManualModalTitle">مرحباً بك في نظام الكاونتر</h3>
+    <p>للتعرف على خطوات إعداد الكاونتر واختيار قوائم الانتظار وإدارة أدوار المراجعين، يمكنك الاطلاع على دليل المستخدم.</p>
+    <div class="manual-modal-actions">
+      <button class="btn primary" type="button" onclick="openStaffUserManual()">فتح دليل المستخدم</button>
+      <button class="btn" type="button" onclick="closeStaffUserManual()">متابعة</button>
+    </div>
+    <label class="manual-modal-remember">
+      <input id="staffManualDontShowAgain" type="checkbox" />
+      <span>عدم إظهار هذه الرسالة مرة أخرى</span>
+    </label>
+  </div>
+</div>
+
 </body>
 </html>`);
     printWindow.document.close();
@@ -3298,6 +3337,47 @@ function showRequiredPasswordChange(userId){
   const msg=document.getElementById("passwordResetMessage");
   msg.textContent="";
   msg.classList.add("hidden");
+}
+
+
+const STAFF_USER_MANUAL_URL = "https://www.dropbox.com/scl/fi/wxpggcqy8bsbap3bbxe41/DARQue_Staff_User_Manual_KU.pdf?rlkey=oebylax3ibfb1bgsafow33nj0&raw=1";
+
+function staffManualStorageKey(){
+  return staff?.userId ? `darque_staff_manual_hidden_${staff.userId}` : "darque_staff_manual_hidden";
+}
+
+function maybeShowStaffUserManual(){
+  if(!staff || staff.role !== "staff") return;
+  try{
+    if(localStorage.getItem(staffManualStorageKey()) === "1") return;
+  }catch(e){
+    console.warn("Could not read staff manual preference:",e);
+  }
+  const modal=document.getElementById("staffManualModal");
+  const checkbox=document.getElementById("staffManualDontShowAgain");
+  if(checkbox) checkbox.checked=false;
+  modal?.classList.remove("hidden");
+}
+
+function rememberStaffManualPreference(){
+  const checkbox=document.getElementById("staffManualDontShowAgain");
+  if(!checkbox?.checked) return;
+  try{
+    localStorage.setItem(staffManualStorageKey(),"1");
+  }catch(e){
+    console.warn("Could not save staff manual preference:",e);
+  }
+}
+
+function closeStaffUserManual(){
+  rememberStaffManualPreference();
+  document.getElementById("staffManualModal")?.classList.add("hidden");
+}
+
+function openStaffUserManual(){
+  rememberStaffManualPreference();
+  window.open(STAFF_USER_MANUAL_URL,"_blank","noopener,noreferrer");
+  document.getElementById("staffManualModal")?.classList.add("hidden");
 }
 
 async function staffLogin(){
@@ -3413,6 +3493,7 @@ async function staffLogin(){
 
   document.querySelector(".nav")?.classList.add("hidden");
   document.getElementById("staffPanel").classList.remove("hidden");
+  maybeShowStaffUserManual();
   await loadHallsAndDisplays();
   await loadServiceLocations();
   await loadAvailableWorkCounters();
@@ -3431,6 +3512,7 @@ async function staffLogout(){
   stopStaffPresenceHeartbeat();
   stopOversightAutoRefresh();
   await supabaseClient.auth.signOut();
+  document.getElementById("staffManualModal")?.classList.add("hidden");
   staff=null;
   current=null;
   document.getElementById("adminNavBtn").classList.add("hidden");
