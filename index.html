@@ -2108,15 +2108,21 @@ async function fetchCentralPermissions(userId,homeDepartment=null,homeSection=nu
   }
 
   const scopedRows=(permissionRows || []).filter(p=>{
-    // Existing users with no assigned section remain backward-compatible.
-    if(!homeSection) return true;
+    // A staff member's assigned administration is authoritative.
+    // Old permission rows from another administration must not appear
+    // in counter setup or make unrelated locations selectable.
+    if(homeDepartment && p.department!==homeDepartment){
+      return false;
+    }
 
-    // The section restriction applies to the employee's own administration.
-    // This also supports future administrations that develop sections.
-    if(homeDepartment && p.department===homeDepartment){
+    // If the assigned administration has a specific home section,
+    // only permissions from that section are available operationally.
+    if(homeSection){
       return (p.section || null)===homeSection;
     }
 
+    // No section assigned: preserve the previous behavior within
+    // the employee's assigned administration.
     return true;
   });
 
@@ -4092,17 +4098,16 @@ async function refreshStaff(){
   let servedCount=0;
   let servedError=null;
 
-  if(staff.counter){
-    let servedQuery=supabaseClient
+  // "تم إنجازها" = tickets completed by THIS employee today (Kuwait date),
+  // regardless of which counter/location they used during the day.
+  if(staff.userId){
+    const servedResult=await supabaseClient
       .from("tickets")
       .select("id",{count:"exact",head:true})
       .eq("status","done")
-      .eq("counter_number",Number(staff.counter));
+      .eq("served_by_user_id",staff.userId)
+      .eq("queue_date",kuwaitIsoDate());
 
-    if(staff.hallId) servedQuery=servedQuery.eq("hall_id",Number(staff.hallId));
-    else servedQuery=servedQuery.is("hall_id",null);
-
-    const servedResult=await servedQuery;
     servedCount=servedResult.count || 0;
     servedError=servedResult.error;
   }
@@ -4281,7 +4286,9 @@ async function completeCurrent(){
     .from("tickets")
     .update({
       status:"done",
-      completed_at:new Date().toISOString()
+      completed_at:new Date().toISOString(),
+      // Re-assert employee attribution at completion for reporting/counter metrics.
+      served_by_user_id:staff.userId || null
     })
     .eq("id",current.id);
 
