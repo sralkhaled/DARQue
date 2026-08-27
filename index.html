@@ -269,6 +269,23 @@
 #staffManualWelcomeDialog .manual-dialog-checkbox{display:flex;align-items:center;gap:8px;margin-top:14px;color:var(--muted);font-size:.95rem}
 #staffManualWelcomeDialog .manual-dialog-checkbox input{width:18px;height:18px}
 
+
+
+/* DARQue staff message engine */
+#staffDynamicMessageOverlay{position:fixed;inset:0;background:rgba(15,23,42,.42);display:none;align-items:center;justify-content:center;padding:20px;z-index:10050}
+#staffDynamicMessageDialog{width:min(560px,100%);background:#fff;border-radius:20px;padding:24px;box-shadow:0 24px 70px rgba(15,23,42,.28);text-align:right;direction:rtl;border-top:5px solid var(--primary)}
+#staffDynamicMessageDialog.friendly{border-top-color:#15937d}
+#staffDynamicMessageDialog.admin{border-top-color:#b42318}
+#staffDynamicMessageDialog h3{margin:0 0 10px;font-size:22px}
+#staffDynamicMessageDialog .message-body{font-size:16px;line-height:1.9;white-space:pre-wrap}
+.message-admin-panel{border:1px solid #dbe4ee;background:#fbfdff;border-radius:16px;padding:18px;margin:18px 0}
+.message-admin-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.message-admin-list{display:grid;gap:10px;margin-top:14px}
+.message-admin-item{border:1px solid #e2e8f0;border-radius:14px;padding:14px;background:#fff}
+.message-admin-item .meta{font-size:12px;color:#64748b;margin-top:6px}
+.message-chip{display:inline-block;padding:3px 8px;border-radius:999px;background:#eef2ff;font-size:12px;margin-left:5px}
+#messageManagerAccessDenied{padding:14px;border-radius:12px;background:#fff5f5;color:#8a1c1c}
+
 </style>
 </head>
 <body>
@@ -754,6 +771,7 @@
           
           <button class="btn" onclick="openServiceManagement()">إدارة الخدمات</button>
           <button class="btn" onclick="openLetterRangeManagement()">نطاقات الحروف</button>
+          <button id="messageManagerBtn" class="btn hidden" onclick="openMessageManager()">إدارة الرسائل</button>
           <button class="btn primary" onclick="openAddUserForm()">+ إضافة مستخدم</button>
         </div>
       </div>
@@ -788,6 +806,41 @@
             <option value="active">نشط</option>
             <option value="inactive">موقوف</option>
           </select>
+        </div>
+      </div>
+
+
+      <div id="messageManagerPanel" class="message-admin-panel hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div>
+            <h3 class="section-title" style="margin-bottom:4px">إدارة رسائل الموظفين</h3>
+            <div class="muted">إنشاء رسائل تظهر للموظفين عند تسجيل الدخول، في أوقات محددة، أو بعد خدمة عدد معين من المراجعين.</div>
+          </div>
+          <button class="btn" onclick="closeMessageManager()">إغلاق</button>
+        </div>
+        <div id="messageManagerAccessDenied" class="hidden" style="margin-top:12px">هذه الخاصية متاحة فقط للحساب المخول.</div>
+        <div id="messageManagerForm" style="margin-top:14px">
+          <div class="message-admin-grid">
+            <div class="field"><label>عنوان الرسالة</label><input id="msgTitle" placeholder="مثال: صباح الخير" /></div>
+            <div class="field"><label>نوع الرسالة</label><select id="msgType"><option value="friendly">ترحيبية / تحفيزية</option><option value="admin">تنبيه إداري</option></select></div>
+            <div class="field"><label>متى تظهر؟</label><select id="msgTrigger" onchange="updateMessageTriggerFields()"><option value="login">عند تسجيل الدخول</option><option value="time">في وقت محدد</option><option value="served_count">بعد عدد من المراجعين</option></select></div>
+            <div class="field"><label>التكرار</label><select id="msgRepeat"><option value="once_daily">مرة واحدة في اليوم</option><option value="once">مرة واحدة فقط لكل موظف</option></select></div>
+            <div id="msgTimeFromWrap" class="field"><label>من الساعة</label><input id="msgTimeFrom" type="time" value="07:00" /></div>
+            <div id="msgTimeToWrap" class="field"><label>إلى الساعة</label><input id="msgTimeTo" type="time" value="10:00" /></div>
+            <div id="msgCountWrap" class="field hidden"><label>بعد خدمة</label><input id="msgCount" type="number" min="1" value="10" /><small class="muted">مراجعين في نفس اليوم</small></div>
+            <div class="field"><label>المستهدف</label><select id="msgTargetType" onchange="updateMessageTargetField()"><option value="all">جميع الموظفين</option><option value="department">إدارة معينة</option><option value="user">موظف معين</option></select></div>
+            <div id="msgTargetValueWrap" class="field hidden"><label id="msgTargetValueLabel">القيمة</label><input id="msgTargetValue" placeholder="registration أو البريد الإلكتروني" /></div>
+            <div class="field"><label>تاريخ البداية (اختياري)</label><input id="msgStartDate" type="date" /></div>
+            <div class="field"><label>تاريخ النهاية (اختياري)</label><input id="msgEndDate" type="date" /></div>
+          </div>
+          <div class="field"><label>نص الرسالة</label><textarea id="msgBody" rows="4" placeholder="مثال: صباح الخير يا {first_name} ☀️ نتمنى لك يوم عمل موفق"></textarea><small class="muted">استخدم {first_name} لإظهار الاسم الأول للموظف تلقائياً.</small></div>
+          <div class="field"><label>أيام الظهور</label><div style="display:flex;gap:10px;flex-wrap:wrap" id="msgWeekdays">
+            <label><input type="checkbox" value="0" checked> الأحد</label><label><input type="checkbox" value="1" checked> الاثنين</label><label><input type="checkbox" value="2" checked> الثلاثاء</label><label><input type="checkbox" value="3" checked> الأربعاء</label><label><input type="checkbox" value="4" checked> الخميس</label><label><input type="checkbox" value="5"> الجمعة</label><label><input type="checkbox" value="6"> السبت</label>
+          </div></div>
+          <div class="actions"><button class="btn primary" onclick="saveStaffMessage()">حفظ ونشر</button><button class="btn" onclick="resetStaffMessageForm()">مسح الحقول</button></div>
+          <div id="messageManagerStatus" class="notice hidden" style="margin-top:10px"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px"><h4 style="margin:0">الرسائل الحالية</h4><button class="btn" onclick="loadManagedMessages()">تحديث</button></div>
+          <div id="managedMessagesList" class="message-admin-list"></div>
         </div>
       </div>
 
@@ -1317,6 +1370,15 @@
 </main>
 
 <script src="https://unpkg.com/qr-code-styling@1.6.0/lib/qr-code-styling.js"></script>
+
+<div id="staffDynamicMessageOverlay" role="dialog" aria-modal="true" aria-labelledby="staffDynamicMessageTitle">
+  <div id="staffDynamicMessageDialog" class="friendly">
+    <h3 id="staffDynamicMessageTitle">رسالة</h3>
+    <div id="staffDynamicMessageBody" class="message-body"></div>
+    <div class="actions" style="margin-top:18px;justify-content:flex-end"><button class="btn primary" onclick="closeStaffDynamicMessage()">متابعة</button></div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
 // Refresh central staff permissions automatically so superuser changes
 // take effect without requiring logout/login.
@@ -3422,7 +3484,8 @@ async function staffLogin(){
       role:profile.role,
       department:profile.department,
       section:profile.section || null,
-      canOversee:!!profile.can_oversee
+      canOversee:!!profile.can_oversee,
+      email:(authData.user.email || email || "").toLowerCase()
     };
     document.getElementById("staffLogin").classList.add("hidden");
     showRequiredPasswordChange(profile.id);
@@ -3439,6 +3502,7 @@ async function staffLogin(){
     department:profile.department,
     section:profile.section || null,
     canOversee:!!profile.can_oversee,
+    email:(authData.user.email || email || "").toLowerCase(),
     counter:"",
     counterId:null,
     hallId:null,
@@ -3463,6 +3527,7 @@ async function staffLogin(){
     !(profile.role==="overseer" || (profile.role==="superuser" && profile.can_oversee===true))
   );
   document.getElementById("superuserQuickAccess").classList.toggle("hidden", profile.role!=="superuser");
+  document.getElementById("messageManagerBtn")?.classList.toggle("hidden", !isMessageController());
 
   if(profile.role==="overseer"){
     document.getElementById("staffLogin").classList.add("hidden");
@@ -3495,9 +3560,13 @@ async function staffLogin(){
   await loadAvailableWorkCounters();
   renderPermissions();
   await refreshStaff();
+  await evaluateStaffMessages("login");
+  startStaffMessageClock();
 }
 
 async function staffLogout(){
+  if(staffMessageClockTimer){ clearInterval(staffMessageClockTimer); staffMessageClockTimer=null; }
+  closeStaffDynamicMessage();
   try{
     if(staff?.userId && staff.role!=="overseer"){
       await supabaseClient.rpc("clear_staff_presence");
@@ -4356,6 +4425,7 @@ async function refreshStaff(){
   }
 
   document.getElementById("servedCount").textContent=servedCount ?? 0;
+  if(staff?.role==="staff") setTimeout(()=>evaluateStaffMessages("served_count", Number(servedCount||0)), 0);
   document.getElementById("counterCurrent").textContent=current?current.number:"—";
 
   document.getElementById("staffQueue").innerHTML=q.length?q.map(t=>`
@@ -4368,6 +4438,178 @@ async function refreshStaff(){
     </div>`).join(""):`<div class="muted">لا توجد أدوار منتظرة لقوائم الانتظار النشطة.</div>`;
 
   renderCurrent();
+}
+
+
+// ===== DARQue Staff Message Engine =====
+const DARQUE_MESSAGE_CONTROLLER_EMAIL="saud.alkhaled@ku.edu.kw";
+let staffMessageClockTimer=null;
+let activeStaffMessage=null;
+
+function isMessageController(){
+  return !!staff && String(staff.email||"").toLowerCase()===DARQUE_MESSAGE_CONTROLLER_EMAIL;
+}
+function kuwaitNow(){
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Kuwait",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23",weekday:"short"}).formatToParts(new Date());
+  const o=Object.fromEntries(parts.map(x=>[x.type,x.value]));
+  const map={Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6};
+  return {date:`${o.year}-${o.month}-${o.day}`,time:`${o.hour}:${o.minute}`,weekday:map[o.weekday]};
+}
+function staffFirstName(){
+  return String(staff?.name||"").trim().split(/\s+/)[0] || "";
+}
+function personalizeStaffMessage(text){
+  return String(text||"").replaceAll("{first_name}",staffFirstName());
+}
+function messageDeliveryKey(m,ctxValue){
+  const now=kuwaitNow();
+  if(m.repeat_mode==="once") return "once";
+  if(m.trigger_type==="served_count") return `${now.date}:count:${m.after_count}`;
+  return now.date;
+}
+async function hasMessageBeenDelivered(messageId,key){
+  const {data,error}=await supabaseClient.from("staff_message_deliveries").select("id").eq("message_id",messageId).eq("user_id",staff.userId).eq("delivery_key",key).limit(1);
+  if(error){ console.warn("Message delivery check:",error); return false; }
+  return !!(data&&data.length);
+}
+async function recordMessageDelivery(messageId,key){
+  const {error}=await supabaseClient.from("staff_message_deliveries").insert({message_id:messageId,user_id:staff.userId,delivery_key:key});
+  if(error && !String(error.code||"").includes("23505")) console.warn("Message delivery record:",error);
+}
+function messageTargetsStaff(m){
+  if(m.target_type==="all") return true;
+  if(m.target_type==="department") return String(m.target_value||"")===String(staff.department||"");
+  if(m.target_type==="user") return String(m.target_value||"").toLowerCase()===String(staff.email||"").toLowerCase();
+  return false;
+}
+function messageInSchedule(m,context,servedCount){
+  const now=kuwaitNow();
+  if(m.start_date && now.date<m.start_date) return false;
+  if(m.end_date && now.date>m.end_date) return false;
+  const days=Array.isArray(m.weekdays)?m.weekdays.map(Number):[];
+  if(days.length && !days.includes(now.weekday)) return false;
+  if(m.trigger_type!==context) return false;
+  if(m.trigger_type==="served_count") return Number(servedCount||0)>=Number(m.after_count||0) && Number(m.after_count||0)>0;
+  if(m.time_from && now.time<m.time_from.slice(0,5)) return false;
+  if(m.time_to && now.time>m.time_to.slice(0,5)) return false;
+  return true;
+}
+async function evaluateStaffMessages(context,servedCount=0){
+  if(!staff || staff.role!=="staff") return;
+  const {data,error}=await supabaseClient.from("staff_messages").select("*").eq("active",true).order("created_at",{ascending:true});
+  if(error){
+    if(!["42P01","PGRST205"].includes(error.code)) console.warn("Staff messages unavailable:",error);
+    return;
+  }
+  for(const m of (data||[])){
+    if(!messageTargetsStaff(m) || !messageInSchedule(m,context,servedCount)) continue;
+    const key=messageDeliveryKey(m,servedCount);
+    if(await hasMessageBeenDelivered(m.id,key)) continue;
+    await showStaffDynamicMessage(m,key);
+    break;
+  }
+}
+async function showStaffDynamicMessage(m,key){
+  activeStaffMessage={message:m,key};
+  const dialog=document.getElementById("staffDynamicMessageDialog");
+  dialog.className=m.message_type==="admin"?"admin":"friendly";
+  document.getElementById("staffDynamicMessageTitle").textContent=personalizeStaffMessage(m.title||"رسالة");
+  document.getElementById("staffDynamicMessageBody").textContent=personalizeStaffMessage(m.body||"");
+  document.getElementById("staffDynamicMessageOverlay").style.display="flex";
+  document.body.style.overflow="hidden";
+  await recordMessageDelivery(m.id,key);
+}
+function closeStaffDynamicMessage(){
+  document.getElementById("staffDynamicMessageOverlay").style.display="none";
+  document.body.style.overflow="";
+  activeStaffMessage=null;
+}
+function startStaffMessageClock(){
+  if(staffMessageClockTimer) clearInterval(staffMessageClockTimer);
+  staffMessageClockTimer=setInterval(()=>evaluateStaffMessages("time"),60000);
+  setTimeout(()=>evaluateStaffMessages("time"),1500);
+}
+
+function openMessageManager(){
+  const panel=document.getElementById("messageManagerPanel");
+  panel?.classList.remove("hidden");
+  const ok=isMessageController();
+  document.getElementById("messageManagerAccessDenied")?.classList.toggle("hidden",ok);
+  document.getElementById("messageManagerForm")?.classList.toggle("hidden",!ok);
+  if(ok){ updateMessageTriggerFields(); updateMessageTargetField(); loadManagedMessages(); }
+  panel?.scrollIntoView({behavior:"smooth",block:"start"});
+}
+function closeMessageManager(){document.getElementById("messageManagerPanel")?.classList.add("hidden");}
+function updateMessageTriggerFields(){
+  const t=document.getElementById("msgTrigger")?.value;
+  document.getElementById("msgCountWrap")?.classList.toggle("hidden",t!=="served_count");
+  document.getElementById("msgTimeFromWrap")?.classList.toggle("hidden",t==="served_count");
+  document.getElementById("msgTimeToWrap")?.classList.toggle("hidden",t==="served_count");
+}
+function updateMessageTargetField(){
+  const t=document.getElementById("msgTargetType")?.value;
+  document.getElementById("msgTargetValueWrap")?.classList.toggle("hidden",t==="all");
+  const label=document.getElementById("msgTargetValueLabel");
+  const input=document.getElementById("msgTargetValue");
+  if(t==="department"){ label.textContent="الإدارة"; input.placeholder="registration / records / admissions / graduates"; }
+  else if(t==="user"){ label.textContent="البريد الإلكتروني للموظف"; input.placeholder="name@ku.edu.kw"; }
+}
+function setMessageManagerStatus(text,isError=false){
+  const el=document.getElementById("messageManagerStatus"); if(!el)return;
+  el.textContent=text; el.classList.remove("hidden"); el.style.background=isError?"#fff1f2":"#f0fdf4"; el.style.color=isError?"#9f1239":"#166534";
+}
+function selectedMessageWeekdays(){return [...document.querySelectorAll('#msgWeekdays input[type="checkbox"]:checked')].map(x=>Number(x.value));}
+async function saveStaffMessage(){
+  if(!isMessageController()){ alert("غير مصرح لك بإدارة الرسائل."); return; }
+  const title=document.getElementById("msgTitle").value.trim();
+  const body=document.getElementById("msgBody").value.trim();
+  const trigger=document.getElementById("msgTrigger").value;
+  const targetType=document.getElementById("msgTargetType").value;
+  const targetValue=document.getElementById("msgTargetValue").value.trim();
+  if(!title || !body){ setMessageManagerStatus("يرجى إدخال عنوان الرسالة ونصها.",true); return; }
+  if(targetType!=="all" && !targetValue){ setMessageManagerStatus("يرجى تحديد الجهة أو الموظف المستهدف.",true); return; }
+  const row={
+    title,body,message_type:document.getElementById("msgType").value,trigger_type:trigger,repeat_mode:document.getElementById("msgRepeat").value,
+    time_from:trigger==="served_count"?null:(document.getElementById("msgTimeFrom").value||null),
+    time_to:trigger==="served_count"?null:(document.getElementById("msgTimeTo").value||null),
+    after_count:trigger==="served_count"?Number(document.getElementById("msgCount").value||0):null,
+    target_type:targetType,target_value:targetType==="all"?null:targetValue,start_date:document.getElementById("msgStartDate").value||null,end_date:document.getElementById("msgEndDate").value||null,
+    weekdays:selectedMessageWeekdays(),active:true,created_by:staff.userId
+  };
+  const {error}=await supabaseClient.from("staff_messages").insert(row);
+  if(error){
+    console.error(error); setMessageManagerStatus(error.code==="42P01"||error.code==="PGRST205"?"جدول الرسائل غير مفعّل بعد في Supabase. نفّذ ملف SQL المرفق مرة واحدة.":`تعذر حفظ الرسالة: ${error.message}`,true); return;
+  }
+  setMessageManagerStatus("تم حفظ الرسالة ونشرها بنجاح."); resetStaffMessageForm(); await loadManagedMessages();
+}
+function resetStaffMessageForm(){
+  ["msgTitle","msgBody","msgTargetValue","msgStartDate","msgEndDate"].forEach(id=>{const e=document.getElementById(id);if(e)e.value="";});
+  document.getElementById("msgType").value="friendly"; document.getElementById("msgTrigger").value="login"; document.getElementById("msgRepeat").value="once_daily"; document.getElementById("msgTargetType").value="all"; document.getElementById("msgTimeFrom").value="07:00"; document.getElementById("msgTimeTo").value="10:00"; document.getElementById("msgCount").value="10";
+  updateMessageTriggerFields(); updateMessageTargetField();
+}
+function messageTriggerLabel(m){
+  if(m.trigger_type==="served_count") return `بعد ${m.after_count} مراجعين`;
+  if(m.trigger_type==="time") return `وقت محدد ${m.time_from||""}–${m.time_to||""}`;
+  return "عند تسجيل الدخول";
+}
+async function loadManagedMessages(){
+  if(!isMessageController()) return;
+  const box=document.getElementById("managedMessagesList"); box.innerHTML='<div class="muted">جاري التحميل...</div>';
+  const {data,error}=await supabaseClient.from("staff_messages").select("*").order("created_at",{ascending:false});
+  if(error){box.innerHTML='<div class="notice">تعذر تحميل الرسائل. إذا كانت هذه أول مرة، نفّذ ملف SQL المرفق في Supabase.</div>';return;}
+  box.innerHTML=(data||[]).length?(data||[]).map(m=>`<div class="message-admin-item">
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><div><b>${escapeHtml(m.title)}</b><div style="margin-top:6px">${escapeHtml(m.body)}</div></div><span class="message-chip">${m.active?"فعال":"متوقف"}</span></div>
+    <div class="meta"><span class="message-chip">${m.message_type==="admin"?"تنبيه إداري":"ترحيبية/تحفيزية"}</span><span class="message-chip">${messageTriggerLabel(m)}</span><span class="message-chip">${m.target_type==="all"?"جميع الموظفين":escapeHtml(m.target_value||"")}</span></div>
+    <div class="actions" style="margin-top:10px"><button class="btn" onclick="toggleStaffMessage(${m.id},${!m.active})">${m.active?"إيقاف":"تفعيل"}</button><button class="btn danger" onclick="deleteStaffMessage(${m.id})">حذف</button></div>
+  </div>`).join(""):'<div class="muted">لا توجد رسائل محفوظة حالياً.</div>';
+}
+async function toggleStaffMessage(id,active){
+  if(!isMessageController()) return;
+  const {error}=await supabaseClient.from("staff_messages").update({active}).eq("id",id); if(error){alert("تعذر تحديث الرسالة.");return;} await loadManagedMessages();
+}
+async function deleteStaffMessage(id){
+  if(!isMessageController()||!confirm("هل تريد حذف هذه الرسالة؟")) return;
+  const {error}=await supabaseClient.from("staff_messages").delete().eq("id",id); if(error){alert("تعذر حذف الرسالة.");return;} await loadManagedMessages();
 }
 
 function ticketSummary(t){
