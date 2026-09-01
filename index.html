@@ -5684,13 +5684,89 @@ function clearPersistedVisitorTicket(locationSlug){
   }catch{}
 }
 
-function closeVisitorTicketFlow(){
-  const slug=currentServiceLocation?.slug || null;
-  if(slug) clearPersistedVisitorTicket(slug);
-  visitorIssuedTicket=null;
-  visitorState.ticket=null;
-  renderLocationVisitorHome();
+// Visitor-session lock -------------------------------------------------------
+// A scanned location is kept only inside this browser tab/session. The public
+// ?location=... parameter is immediately removed from the address bar, so the
+// ordinary browser Share action exposes only the generic DARQue URL.
+const VISITOR_LOCATION_SESSION_KEY="ku_queue_active_location";
+
+function persistVisitorLocation(locationSlug){
+  if(!locationSlug) return;
+  try{
+    sessionStorage.setItem(VISITOR_LOCATION_SESSION_KEY,locationSlug);
+  }catch{}
 }
+
+function loadPersistedVisitorLocation(){
+  try{
+    return sessionStorage.getItem(VISITOR_LOCATION_SESSION_KEY);
+  }catch{
+    return null;
+  }
+}
+
+function visitorSanitizedUrl(){
+  const url=new URL(window.location.href);
+  url.searchParams.delete("location");
+  return url.toString();
+}
+
+function hideVisitorLocationFromAddressBar(){
+  const cleanUrl=visitorSanitizedUrl();
+  window.history.replaceState({darqueVisitor:true},document.title,cleanUrl);
+}
+
+function armVisitorHistoryLock(){
+  // Add a same-page guard entry. Pressing the browser Back button lands on the
+  // previous DARQue state, where popstate immediately restores the active
+  // visitor journey instead of returning to ticket selection.
+  const cleanUrl=visitorSanitizedUrl();
+  window.history.replaceState({darqueVisitor:true},document.title,cleanUrl);
+  window.history.pushState({darqueVisitor:true,guard:true},document.title,cleanUrl);
+}
+
+async function restoreLockedVisitorSession(){
+  const slug=loadPersistedVisitorLocation();
+  if(!slug) return false;
+
+  if(!(serviceLocations || []).length){
+    await loadServiceLocations();
+  }
+
+  const location=(serviceLocations || []).find(l=>l.slug===slug && l.active) || null;
+  if(!location) return false;
+
+  currentServiceLocation=location;
+  hideSpecialModeChrome();
+  hideVisitorLocationFromAddressBar();
+
+  const persisted=loadPersistedVisitorTicket(location.slug);
+  if(persisted){
+    visitorIssuedTicket={ticket_number:persisted,number:persisted};
+    visitorState.ticket={ticket_number:persisted,number:persisted};
+    showView("visitorWaiting");
+    await renderVisitorWaiting();
+  }else{
+    renderLocationVisitorHome();
+  }
+
+  return true;
+}
+
+window.addEventListener("popstate",async ()=>{
+  const slug=loadPersistedVisitorLocation();
+  if(!slug) return;
+
+  await restoreLockedVisitorSession();
+  // Re-arm the guard so repeated Back presses remain inside this visitor
+  // journey. Browsers ultimately control their own navigation UI, but this
+  // prevents normal Back navigation from reopening ticket selection.
+  window.history.pushState(
+    {darqueVisitor:true,guard:true},
+    document.title,
+    visitorSanitizedUrl()
+  );
+});
 
 async function applyDisplayUrl(){
   const slug=new URL(window.location.href).searchParams.get("display");
@@ -5727,14 +5803,48 @@ async function applyDisplayUrl(){
 }
 
 async function resolveLocationFromUrl(){
-  const slug=new URL(window.location.href).searchParams.get("location"); if(!slug)return false;
+  const url=new URL(window.location.href);
+
+  // Never let a stored visitor session hijack a dedicated display URL.
+  if(url.searchParams.get("display")) return false;
+
+  const explicitSlug=url.searchParams.get("location");
+  const slug=explicitSlug || loadPersistedVisitorLocation();
+  if(!slug) return false;
+
   await loadServiceLocations();
   currentServiceLocation=serviceLocations.find(l=>l.slug===slug&&l.active)||null;
   if(!currentServiceLocation)return false;
 
+  let persisted=loadPersistedVisitorTicket(currentServiceLocation.slug);
+
+  // A deliberate fresh QR scan may start a new visit only after the previous
+  // ticket has already reached a terminal state. Waiting/called tickets remain
+  // locked so rescanning cannot be used to obtain a duplicate number.
+  if(explicitSlug && persisted){
+    const {data:previousState,error:previousStateError}=await supabaseClient.rpc(
+      "get_visitor_ticket_state",
+      {
+        p_location_slug:currentServiceLocation.slug,
+        p_ticket_number:persisted
+      }
+    );
+    const previousRow=Array.isArray(previousState) ? previousState[0] : previousState;
+    if(!previousStateError && (previousRow?.status==="done" || previousRow?.status==="noshow")){
+      clearPersistedVisitorTicket(currentServiceLocation.slug);
+      persisted=null;
+      visitorIssuedTicket=null;
+      visitorState.ticket=null;
+    }
+  }
+
+  // Once a valid QR/location has been resolved, keep the location private to
+  // this tab and remove it from the shareable URL.
+  persistVisitorLocation(currentServiceLocation.slug);
+  hideVisitorLocationFromAddressBar();
+  armVisitorHistoryLock();
   hideSpecialModeChrome();
 
-  const persisted=loadPersistedVisitorTicket(currentServiceLocation.slug);
   if(persisted){
     visitorIssuedTicket={ticket_number:persisted,number:persisted};
     visitorState.ticket={ticket_number:persisted,number:persisted};
@@ -5879,8 +5989,7 @@ function renderVisitorTicketLifecycle(state){
     box.className="visitor-ticket-status done";
     box.innerHTML=`
       <div class="status-title">تمت خدمتك ✓</div>
-      <div style="font-weight:500">شكراً لزيارتك.</div>
-      <div class="actions"><button class="btn primary" onclick="closeVisitorTicketFlow()">إنهاء</button></div>`;
+      <div style="font-weight:500">شكراً لزيارتك.</div>`;
     return true;
   }
 
@@ -5888,8 +5997,7 @@ function renderVisitorTicketLifecycle(state){
     box.className="visitor-ticket-status noshow";
     box.innerHTML=`
       <div class="status-title">تم تجاوز رقم الانتظار</div>
-      <div style="font-weight:500">إذا كنت لا تزال بحاجة إلى الخدمة، يرجى إصدار رقم انتظار جديد.</div>
-      <div class="actions"><button class="btn primary" onclick="closeVisitorTicketFlow()">إصدار رقم جديد</button></div>`;
+      <div style="font-weight:500">إذا كنت لا تزال بحاجة إلى الخدمة، يرجى مسح رمز QR مرة أخرى.</div>`;
     return true;
   }
 
