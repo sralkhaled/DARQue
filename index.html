@@ -113,6 +113,11 @@
   .visitor-own-card .label{font-size:21px;font-weight:800;color:var(--muted)}
   .visitor-own-card .num{font-size:68px;font-weight:900;color:var(--primary);line-height:1.1;margin:14px 0}
   .visitor-own-card .place{font-size:18px;font-weight:700;color:var(--muted)}
+  .dean-admission-status{width:100%;margin-top:16px;padding:14px 16px;border-radius:14px;font-size:16px;line-height:1.75;font-weight:700;text-align:center}
+  .dean-admission-status.wait{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412}
+  .dean-admission-status.go{background:#ecfdf3;border:1px solid #86efac;color:#166534}
+  .dean-admission-status.called{background:#eff6ff;border:1px solid #93c5fd;color:#1e3a8a}
+  .dean-admission-status .position{display:block;font-size:28px;font-weight:900;margin:3px 0}
   .visitor-live-side{min-width:0}
   .visitor-live-side h2{text-align:center;margin-top:0;font-size:30px}
   @media(max-width:760px){
@@ -1342,6 +1347,7 @@
           <div id="visitorWaitingOwnNumber" class="num">—</div>
           <div id="visitorWaitingOwnLocation" class="place"></div>
           <div id="visitorWaitingHint" class="muted" style="margin-top:14px">يرجى متابعة النداء لمعرفة دورك</div>
+          <div id="visitorDeanAdmissionStatus" class="dean-admission-status hidden"></div>
         </aside>
         <div class="visitor-live-side">
           <h2 id="visitorWaitingScreenTitle">شاشة النداء</h2>
@@ -5810,6 +5816,110 @@ function showVisitorWaitingAfterTicket(ticket){
   renderVisitorWaiting();
 }
 
+const DEAN_OFFICE_WAITING_CAPACITY=15;
+
+function isDeanOfficeVisitorLocation(){
+  const name=String(currentServiceLocation?.name || "").replace(/^شاشة\s+/,"").trim();
+  const slug=String(currentServiceLocation?.slug || "").toLowerCase();
+  return name==="مكتب العميد" || slug==="dean-office" || slug==="dean_office" || slug==="deanoffice";
+}
+
+async function getDeanOfficeVisitorQueueState(){
+  if(!isDeanOfficeVisitorLocation() || !currentServiceLocation?.id) return null;
+
+  const ticketNumber=currentVisitorTicketNumber();
+  if(!ticketNumber) return null;
+
+  const today=kuwaitIsoDate();
+
+  // Read the visitor's own current ticket first. This also works after a page reload,
+  // when only the persisted ticket number is available in the browser.
+  const {data:ownRows,error:ownError}=await supabaseClient
+    .from("tickets")
+    .select("id,ticket_number,status,created_at,called_at")
+    .eq("location_id",Number(currentServiceLocation.id))
+    .eq("queue_date",today)
+    .eq("ticket_number",ticketNumber)
+    .order("created_at",{ascending:false})
+    .limit(1);
+
+  if(ownError){
+    console.warn("Dean office own-ticket state read failed:",ownError);
+    return null;
+  }
+
+  const own=(ownRows||[])[0] || null;
+  if(!own) return null;
+
+  if(own.status!=="waiting"){
+    return {status:own.status,position:null,capacity:DEAN_OFFICE_WAITING_CAPACITY};
+  }
+
+  // Queue position is based only on currently waiting tickets at this service location.
+  // As soon as someone is called, they leave this list and the next visitor moves up.
+  const {data:waitingRows,error:waitingError}=await supabaseClient
+    .from("tickets")
+    .select("id,ticket_number,created_at")
+    .eq("location_id",Number(currentServiceLocation.id))
+    .eq("queue_date",today)
+    .eq("status","waiting")
+    .order("created_at",{ascending:true});
+
+  if(waitingError){
+    console.warn("Dean office waiting-position read failed:",waitingError);
+    return null;
+  }
+
+  const index=(waitingRows||[]).findIndex(r=>String(r.id)===String(own.id));
+  return {
+    status:"waiting",
+    position:index>=0 ? index+1 : null,
+    capacity:DEAN_OFFICE_WAITING_CAPACITY
+  };
+}
+
+async function renderDeanOfficeAdmissionStatus(){
+  const box=document.getElementById("visitorDeanAdmissionStatus");
+  if(!box) return;
+
+  if(!isDeanOfficeVisitorLocation()){
+    box.className="dean-admission-status hidden";
+    box.innerHTML="";
+    return;
+  }
+
+  const state=await getDeanOfficeVisitorQueueState();
+  if(!state){
+    box.className="dean-admission-status wait";
+    box.innerHTML="يرجى الانتظار ومتابعة هذه الصفحة لمعرفة وقت التوجه إلى مكتب العميد.";
+    return;
+  }
+
+  if(state.status==="called"){
+    box.className="dean-admission-status called";
+    box.innerHTML="<b>تم نداء رقمك</b><br>يرجى التوجه الآن إلى مكتب العميد.";
+    return;
+  }
+
+  if(state.status!=="waiting"){
+    box.className="dean-admission-status hidden";
+    box.innerHTML="";
+    return;
+  }
+
+  if(state.position && state.position<=state.capacity){
+    box.className="dean-admission-status go";
+    box.innerHTML=`✅ <b>يمكنك التوجه الآن إلى مكتب العميد</b><br><span style="font-weight:500">يرجى إبراز هذه الشاشة عند الدخول.</span>`;
+    return;
+  }
+
+  box.className="dean-admission-status wait";
+  const positionText=state.position
+    ? `<span class="position">${state.position}</span><span style="font-weight:500">ترتيبك الحالي في الانتظار</span><br>`
+    : "";
+  box.innerHTML=`${positionText}<b>يرجى الانتظار حالياً</b><br><span style="font-weight:500">سيظهر لك هنا عند السماح بالتوجه إلى مكتب العميد.</span>`;
+}
+
 async function renderVisitorWaiting(){
   if(!currentServiceLocation?.slug) return;
 
@@ -5830,10 +5940,14 @@ async function renderVisitorWaiting(){
 
   const hasCounters=displayRequiresCounter(cfg);
   if(hint){
-    hint.textContent=hasCounters
-      ? "يرجى متابعة النداء لمعرفة دورك والكاونتر"
-      : "يرجى متابعة النداء لمعرفة دورك";
+    hint.textContent=isDeanOfficeVisitorLocation()
+      ? "احتفظ بهذه الصفحة مفتوحة لمتابعة حالة الدخول"
+      : (hasCounters
+          ? "يرجى متابعة النداء لمعرفة دورك والكاونتر"
+          : "يرجى متابعة النداء لمعرفة دورك");
   }
+
+  await renderDeanOfficeAdmissionStatus();
 
   const {data,error}=await supabaseClient.rpc("get_location_display_calls",{
     p_location_slug:currentServiceLocation.slug
