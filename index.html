@@ -113,6 +113,12 @@
   .visitor-own-card .label{font-size:21px;font-weight:800;color:var(--muted)}
   .visitor-own-card .num{font-size:68px;font-weight:900;color:var(--primary);line-height:1.1;margin:14px 0}
   .visitor-own-card .place{font-size:18px;font-weight:700;color:var(--muted)}
+  .visitor-ticket-status{width:100%;margin-top:16px;padding:14px 16px;border-radius:14px;font-size:16px;line-height:1.75;font-weight:700;text-align:center}
+  .visitor-ticket-status.called{background:#eff6ff;border:1px solid #93c5fd;color:#1e3a8a}
+  .visitor-ticket-status.done{background:#ecfdf3;border:1px solid #86efac;color:#166534}
+  .visitor-ticket-status.noshow{background:#fff7ed;border:1px solid #fdba74;color:#9a3412}
+  .visitor-ticket-status .status-title{font-size:19px;font-weight:900;margin-bottom:5px}
+  .visitor-ticket-status .actions{justify-content:center;margin-top:12px}
   .dean-admission-status{width:100%;margin-top:16px;padding:14px 16px;border-radius:14px;font-size:16px;line-height:1.75;font-weight:700;text-align:center}
   .dean-admission-status.wait{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412}
   .dean-admission-status.go{background:#ecfdf3;border:1px solid #86efac;color:#166534}
@@ -1347,6 +1353,7 @@
           <div id="visitorWaitingOwnNumber" class="num">—</div>
           <div id="visitorWaitingOwnLocation" class="place"></div>
           <div id="visitorWaitingHint" class="muted" style="margin-top:14px">يرجى متابعة النداء لمعرفة دورك</div>
+          <div id="visitorTicketLifecycleStatus" class="visitor-ticket-status hidden"></div>
           <div id="visitorDeanAdmissionStatus" class="dean-admission-status hidden"></div>
         </aside>
         <div class="visitor-live-side">
@@ -5670,6 +5677,21 @@ function loadPersistedVisitorTicket(locationSlug){
   }
 }
 
+function clearPersistedVisitorTicket(locationSlug){
+  if(!locationSlug) return;
+  try{
+    sessionStorage.removeItem(`ku_queue_ticket_${locationSlug}`);
+  }catch{}
+}
+
+function closeVisitorTicketFlow(){
+  const slug=currentServiceLocation?.slug || null;
+  if(slug) clearPersistedVisitorTicket(slug);
+  visitorIssuedTicket=null;
+  visitorState.ticket=null;
+  renderLocationVisitorHome();
+}
+
 async function applyDisplayUrl(){
   const slug=new URL(window.location.href).searchParams.get("display");
   if(!slug) return false;
@@ -5816,12 +5838,85 @@ function showVisitorWaitingAfterTicket(ticket){
   renderVisitorWaiting();
 }
 
+async function getVisitorTicketState(){
+  if(!currentServiceLocation?.slug) return null;
+
+  const ticketNumber=currentVisitorTicketNumber();
+  if(!ticketNumber) return null;
+
+  const {data,error}=await supabaseClient.rpc("get_visitor_ticket_state",{
+    p_location_slug:currentServiceLocation.slug,
+    p_ticket_number:ticketNumber
+  });
+
+  if(error){
+    console.warn("Visitor ticket-state RPC failed:",error);
+    return null;
+  }
+
+  const row=Array.isArray(data) ? data[0] : data;
+  if(!row) return null;
+
+  return {
+    status:row.status || null,
+    counter_number:row.counter_number==null ? null : Number(row.counter_number),
+    called_at:row.called_at || null,
+    completed_at:row.completed_at || null
+  };
+}
+
+function renderVisitorTicketLifecycle(state){
+  const box=document.getElementById("visitorTicketLifecycleStatus");
+  if(!box) return false;
+
+  if(!state?.status){
+    box.className="visitor-ticket-status hidden";
+    box.innerHTML="";
+    return false;
+  }
+
+  if(state.status==="done"){
+    box.className="visitor-ticket-status done";
+    box.innerHTML=`
+      <div class="status-title">تمت خدمتك ✓</div>
+      <div style="font-weight:500">شكراً لزيارتك.</div>
+      <div class="actions"><button class="btn primary" onclick="closeVisitorTicketFlow()">إنهاء</button></div>`;
+    return true;
+  }
+
+  if(state.status==="noshow"){
+    box.className="visitor-ticket-status noshow";
+    box.innerHTML=`
+      <div class="status-title">تم تجاوز رقم الانتظار</div>
+      <div style="font-weight:500">إذا كنت لا تزال بحاجة إلى الخدمة، يرجى إصدار رقم انتظار جديد.</div>
+      <div class="actions"><button class="btn primary" onclick="closeVisitorTicketFlow()">إصدار رقم جديد</button></div>`;
+    return true;
+  }
+
+  // Dean's Office keeps its more specific admission/capacity message for
+  // waiting and called states. Other locations show the visitor's own call here.
+  if(state.status==="called" && !isDeanOfficeVisitorLocation()){
+    const destination=state.counter_number
+      ? `كاونتر ${state.counter_number}`
+      : visitorFacingLocationName();
+    box.className="visitor-ticket-status called";
+    box.innerHTML=`
+      <div class="status-title">تم نداء رقمك ✓</div>
+      <div style="font-size:18px;font-weight:800">تفضل بالتوجه إلى ${destination}</div>`;
+    return false;
+  }
+
+  box.className="visitor-ticket-status hidden";
+  box.innerHTML="";
+  return false;
+}
+
 const DEAN_OFFICE_WAITING_CAPACITY=15;
 
 function isDeanOfficeVisitorLocation(){
   const name=String(currentServiceLocation?.name || "").replace(/^شاشة\s+/,"").trim();
   const slug=String(currentServiceLocation?.slug || "").toLowerCase();
-  return name==="مكتب العميد" || slug==="dean-office" || slug==="dean_office" || slug==="deanoffice";
+  return name==="مكتب العميد" || slug==="dean" || slug==="dean-office" || slug==="dean_office" || slug==="deanoffice";
 }
 
 async function getDeanOfficeVisitorQueueState(){
@@ -5852,11 +5947,11 @@ async function getDeanOfficeVisitorQueueState(){
   };
 }
 
-async function renderDeanOfficeAdmissionStatus(){
+async function renderDeanOfficeAdmissionStatus(ticketState=null){
   const box=document.getElementById("visitorDeanAdmissionStatus");
   if(!box) return;
 
-  if(!isDeanOfficeVisitorLocation()){
+  if(!isDeanOfficeVisitorLocation() || ticketState?.status==="done" || ticketState?.status==="noshow"){
     box.className="dean-admission-status hidden";
     box.innerHTML="";
     return;
@@ -5921,7 +6016,16 @@ async function renderVisitorWaiting(){
           : "يرجى متابعة النداء لمعرفة دورك");
   }
 
-  await renderDeanOfficeAdmissionStatus();
+  const ticketState=await getVisitorTicketState();
+  const ticketFinished=renderVisitorTicketLifecycle(ticketState);
+
+  if(ticketFinished && hint){
+    hint.textContent=ticketState?.status==="done"
+      ? "تم إغلاق رقم الانتظار بعد انتهاء الخدمة"
+      : "تم إغلاق رقم الانتظار";
+  }
+
+  await renderDeanOfficeAdmissionStatus(ticketState);
 
   const {data,error}=await supabaseClient.rpc("get_location_display_calls",{
     p_location_slug:currentServiceLocation.slug
