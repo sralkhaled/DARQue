@@ -5825,56 +5825,30 @@ function isDeanOfficeVisitorLocation(){
 }
 
 async function getDeanOfficeVisitorQueueState(){
-  if(!isDeanOfficeVisitorLocation() || !currentServiceLocation?.id) return null;
+  if(!isDeanOfficeVisitorLocation() || !currentServiceLocation?.slug) return null;
 
   const ticketNumber=currentVisitorTicketNumber();
   if(!ticketNumber) return null;
 
-  const today=kuwaitIsoDate();
+  // Secure server-side lookup. The visitor receives only their own status,
+  // current waiting position, and the Dean's Office capacity; no queue rows are exposed.
+  const {data,error}=await supabaseClient.rpc("get_dean_office_visitor_state",{
+    p_location_slug:currentServiceLocation.slug,
+    p_ticket_number:ticketNumber
+  });
 
-  // Read the visitor's own current ticket first. This also works after a page reload,
-  // when only the persisted ticket number is available in the browser.
-  const {data:ownRows,error:ownError}=await supabaseClient
-    .from("tickets")
-    .select("id,ticket_number,status,created_at,called_at")
-    .eq("location_id",Number(currentServiceLocation.id))
-    .eq("queue_date",today)
-    .eq("ticket_number",ticketNumber)
-    .order("created_at",{ascending:false})
-    .limit(1);
-
-  if(ownError){
-    console.warn("Dean office own-ticket state read failed:",ownError);
+  if(error){
+    console.warn("Dean office visitor-state RPC failed:",error);
     return null;
   }
 
-  const own=(ownRows||[])[0] || null;
-  if(!own) return null;
+  const row=Array.isArray(data) ? data[0] : data;
+  if(!row) return null;
 
-  if(own.status!=="waiting"){
-    return {status:own.status,position:null,capacity:DEAN_OFFICE_WAITING_CAPACITY};
-  }
-
-  // Queue position is based only on currently waiting tickets at this service location.
-  // As soon as someone is called, they leave this list and the next visitor moves up.
-  const {data:waitingRows,error:waitingError}=await supabaseClient
-    .from("tickets")
-    .select("id,ticket_number,created_at")
-    .eq("location_id",Number(currentServiceLocation.id))
-    .eq("queue_date",today)
-    .eq("status","waiting")
-    .order("created_at",{ascending:true});
-
-  if(waitingError){
-    console.warn("Dean office waiting-position read failed:",waitingError);
-    return null;
-  }
-
-  const index=(waitingRows||[]).findIndex(r=>String(r.id)===String(own.id));
   return {
-    status:"waiting",
-    position:index>=0 ? index+1 : null,
-    capacity:DEAN_OFFICE_WAITING_CAPACITY
+    status:row.status || null,
+    position:row.queue_position==null ? null : Number(row.queue_position),
+    capacity:row.capacity==null ? DEAN_OFFICE_WAITING_CAPACITY : Number(row.capacity)
   };
 }
 
@@ -5897,7 +5871,7 @@ async function renderDeanOfficeAdmissionStatus(){
 
   if(state.status==="called"){
     box.className="dean-admission-status called";
-    box.innerHTML="<b>تم نداء رقمك</b><br>يرجى التوجه الآن إلى مكتب العميد.";
+    box.innerHTML=`<div style="font-size:18px;font-weight:900;margin-bottom:5px">تم نداء رقمك ✓</div><div style="font-size:19px;font-weight:800;line-height:1.7">تفضل بالتوجه إلى مكتب العميد</div>`;
     return;
   }
 
@@ -5909,7 +5883,7 @@ async function renderDeanOfficeAdmissionStatus(){
 
   if(state.position && state.position<=state.capacity){
     box.className="dean-admission-status go";
-    box.innerHTML=`✅ <b>يمكنك التوجه الآن إلى مكتب العميد</b><br><span style="font-weight:500">يرجى إبراز هذه الشاشة عند الدخول.</span>`;
+    box.innerHTML=`<div style="font-size:18px;font-weight:900;margin-bottom:5px">يمكنك التوجه إلى مكتب العميد ✓</div><div style="font-weight:500">يرجى إبراز هذه الصفحة عند الدخول</div>`;
     return;
   }
 
