@@ -5847,7 +5847,7 @@ async function getDeanOfficeVisitorQueueState(){
 
   return {
     status:row.status || null,
-    position:row.queue_position==null ? null : Number(row.queue_position),
+    position:row.position==null ? null : Number(row.position),
     capacity:row.capacity==null ? DEAN_OFFICE_WAITING_CAPACITY : Number(row.capacity)
   };
 }
