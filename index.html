@@ -4384,27 +4384,54 @@ function staffCanServeTicket(ticket){
 }
 
 async function eligibleTickets(){
-  if(!staff) return [];
+  if(!staff || !staff.locationSlug) return [];
 
-  const { data, error } = await supabaseClient
+  const allowedDepartments = staff.locationDepartments || [];
+  if(!allowedDepartments.length) return [];
+
+  let query = supabaseClient
     .from("tickets")
-    .select("*")
+    .select(`
+      id,
+      ticket_number,
+      department,
+      section,
+      service,
+      college,
+      name_letter,
+      letter_range,
+      status,
+      created_at,
+      called_at,
+      counter_number,
+      location_id,
+      queue_date
+    `)
     .eq("status","waiting")
+    .eq("queue_date",kuwaitIsoDate())
+    .in("department",allowedDepartments)
     .order("created_at",{ascending:true});
+
+  // Preserve the previous behaviour for legacy tickets with no location,
+  // while restricting normal tickets to this staff member's current location.
+  if(staff.locationId != null){
+    query = query.or(
+      `location_id.eq.${Number(staff.locationId)},location_id.is.null`
+    );
+  }
+
+  const { data, error } = await query;
 
   if(error){
     console.error("Supabase queue read failed:", error);
     return [];
   }
 
-  if(!staff.locationSlug) return [];
-
-  const activePermissions=staff.activePermissions || [];
   return (data || [])
     .map(normalizeDbTicket)
     .filter(t=>
       (t.locationId==null || Number(t.locationId)===Number(staff.locationId)) &&
-      (staff.locationDepartments || []).includes(t.dept) &&
+      allowedDepartments.includes(t.dept) &&
       staffCanServeTicket(t)
     );
 }
