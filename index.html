@@ -126,6 +126,42 @@
   .dean-admission-status .position{display:block;font-size:28px;font-weight:900;margin:3px 0}
   .visitor-live-side{min-width:0}
   .visitor-live-side h2{text-align:center;margin-top:0;font-size:30px}
+  /* Visitor queue status: compact, consistent queue cards */
+  #visitorQueueStatusPanel .called,
+  #visitorQueueStatusPanel .history{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(120px,170px));
+    gap:10px;
+    justify-content:center;
+  }
+  #visitorQueueStatusPanel .history{margin-top:10px}
+  #visitorQueueStatusPanel .visitor-queue-card{
+    background:rgba(255,255,255,.08);
+    color:#fff;
+    border:1px solid rgba(255,255,255,.14);
+    border-radius:14px;
+    padding:13px 10px;
+    text-align:center;
+    min-width:0;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+  }
+  #visitorQueueStatusPanel .visitor-queue-card b{
+    display:block;
+    font-size:26px;
+    line-height:1.15;
+    color:#fff;
+  }
+  #visitorQueueStatusPanel .visitor-queue-card div{
+    margin-top:6px;
+    font-size:15px;
+    line-height:1.35;
+    color:rgba(255,255,255,.78);
+  }
+  #visitorQueueStatusPanel .visitor-queue-card.empty{
+    grid-column:1/-1;
+    width:min(100%,360px);
+    justify-self:center;
+  }
   .visitor-waiting-grid.queue-collapsed{grid-template-columns:minmax(0,1fr)}
   .visitor-queue-toggle-wrap{display:flex;justify-content:center;margin:0 0 14px}
   .visitor-queue-toggle{
@@ -6217,23 +6253,20 @@ async function renderVisitorWaiting(){
   const latest=calls[0];
 
   if(!latest){
-    if(latestBox) latestBox.innerHTML=`<div class="call-card" style="grid-column:1/-1"><div class="muted">بانتظار أول نداء</div></div>`;
+    if(latestBox) latestBox.innerHTML=`<div class="visitor-queue-card empty"><div>بانتظار أول نداء</div></div>`;
   }else{
-    const isCounterDestination=!!latest.counter_number;
-    const destination=isCounterDestination
-      ? String(latest.counter_number)
-      : visitorDestinationLabel(latest,cfg);
-    const destinationClass=isCounterDestination ? "c counter-destination" : "c";
-    const destinationLabel=isCounterDestination ? "يرجى التوجه إلى كاونتر" : "يرجى التوجه إلى";
+    const destination=visitorDestinationLabel(latest,cfg);
     if(latestBox) latestBox.innerHTML=`
-      <div class="call-card"><div class="muted">رقم الانتظار</div><div class="n">${latest.ticket_number}</div></div>
-      <div class="call-card"><div class="muted">${destinationLabel}</div><div class="${destinationClass}">${destination}</div></div>`;
+      <div class="visitor-queue-card">
+        <b>${latest.ticket_number}</b>
+        <div>${destination}</div>
+      </div>`;
   }
 
   if(historyBox){
     historyBox.innerHTML=calls.slice(1).map(c=>{
       const destination=visitorDestinationLabel(c,cfg);
-      return `<div class="hist"><b style="font-size:26px">${c.ticket_number}</b><div>${destination}</div></div>`;
+      return `<div class="visitor-queue-card"><b>${c.ticket_number}</b><div>${destination}</div></div>`;
     }).join("");
   }
 }
