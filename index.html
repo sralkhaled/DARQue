@@ -126,6 +126,17 @@
   .dean-admission-status .position{display:block;font-size:28px;font-weight:900;margin:3px 0}
   .visitor-live-side{min-width:0}
   .visitor-live-side h2{text-align:center;margin-top:0;font-size:30px}
+  .visitor-waiting-grid.queue-collapsed{grid-template-columns:minmax(0,1fr)}
+  .visitor-queue-toggle-wrap{display:flex;justify-content:center;margin:0 0 14px}
+  .visitor-queue-toggle{
+    width:100%;border:1px solid rgba(255,255,255,.30);background:rgba(255,255,255,.10);
+    color:#fff;border-radius:14px;padding:12px 16px;cursor:pointer;font-weight:800;
+    display:flex;align-items:center;justify-content:center;gap:9px
+  }
+  .visitor-queue-toggle:hover{background:rgba(255,255,255,.16)}
+  .visitor-queue-toggle .chevron{font-size:18px;line-height:1;transition:transform .15s ease}
+  .visitor-queue-toggle[aria-expanded="true"] .chevron{transform:rotate(180deg)}
+  .visitor-waiting-grid.queue-collapsed .visitor-live-column{grid-column:1/-1}
   @media(max-width:760px){
     main{padding-left:12px;padding-right:12px}
     .visitor-waiting-board,.display-board{padding:18px;border-radius:22px}
@@ -1347,7 +1358,7 @@
   <!-- VISITOR WAITING -->
   <section id="visitorWaiting" class="view">
     <div class="visitor-waiting-board">
-      <div class="visitor-waiting-grid">
+      <div id="visitorWaitingGrid" class="visitor-waiting-grid queue-collapsed">
         <aside class="visitor-own-card">
           <div class="label">رقم انتظارك</div>
           <div id="visitorWaitingOwnNumber" class="num">—</div>
@@ -1356,10 +1367,18 @@
           <div id="visitorTicketLifecycleStatus" class="visitor-ticket-status hidden"></div>
           <div id="visitorDeanAdmissionStatus" class="dean-admission-status hidden"></div>
         </aside>
-        <div class="visitor-live-side">
-          <h2 id="visitorWaitingScreenTitle">شاشة النداء</h2>
-          <div id="visitorWaitingLatest" class="called"></div>
-          <div id="visitorWaitingHistory" class="history"></div>
+        <div class="visitor-live-column">
+          <div class="visitor-queue-toggle-wrap">
+            <button id="visitorQueueToggle" type="button" class="visitor-queue-toggle" aria-expanded="false" aria-controls="visitorQueueStatusPanel" onclick="toggleVisitorQueueStatus()">
+              <span id="visitorQueueToggleLabel">عرض حالة الانتظار</span>
+              <span class="chevron" aria-hidden="true">⌄</span>
+            </button>
+          </div>
+          <div id="visitorQueueStatusPanel" class="visitor-live-side hidden">
+            <h2 id="visitorWaitingScreenTitle">شاشة النداء</h2>
+            <div id="visitorWaitingLatest" class="called"></div>
+            <div id="visitorWaitingHistory" class="history"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -5958,6 +5977,26 @@ function currentVisitorTicketNumber(){
          null;
 }
 
+function setVisitorQueueStatusExpanded(expanded){
+  const grid=document.getElementById("visitorWaitingGrid");
+  const panel=document.getElementById("visitorQueueStatusPanel");
+  const toggle=document.getElementById("visitorQueueToggle");
+  const label=document.getElementById("visitorQueueToggleLabel");
+  if(!grid || !panel || !toggle) return;
+
+  const isExpanded=!!expanded;
+  panel.classList.toggle("hidden",!isExpanded);
+  grid.classList.toggle("queue-collapsed",!isExpanded);
+  toggle.setAttribute("aria-expanded",String(isExpanded));
+  if(label) label.textContent=isExpanded ? "إخفاء حالة الانتظار" : "عرض حالة الانتظار";
+}
+
+function toggleVisitorQueueStatus(){
+  const toggle=document.getElementById("visitorQueueToggle");
+  const expanded=toggle?.getAttribute("aria-expanded")==="true";
+  setVisitorQueueStatusExpanded(!expanded);
+}
+
 function showVisitorWaitingAfterTicket(ticket){
   visitorIssuedTicket=ticket || visitorIssuedTicket;
   if(ticket) visitorState.ticket=ticket;
@@ -5972,6 +6011,7 @@ function showVisitorWaitingAfterTicket(ticket){
   if(displayControlBar) displayControlBar.classList.add("hidden");
 
   showView("visitorWaiting");
+  setVisitorQueueStatusExpanded(false);
   renderVisitorWaiting();
 }
 
