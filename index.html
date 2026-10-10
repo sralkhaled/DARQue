@@ -2264,7 +2264,7 @@ function showIssuedTicket(t){
 async function fetchCentralPermissions(userId,homeDepartment=null,homeSection=null){
   const { data:permissionRows, error:permissionError } = await supabaseClient
     .from("staff_permissions")
-    .select("department,section,college,letter_range,service_catalog(service_name)")
+    .select("department,section,college,letter_range,service_catalog(service_name,department,section,active)")
     .eq("user_id",userId);
 
   if(permissionError){
@@ -2273,22 +2273,21 @@ async function fetchCentralPermissions(userId,homeDepartment=null,homeSection=nu
   }
 
   const scopedRows=(permissionRows || []).filter(p=>{
-    // A staff member's assigned administration is authoritative.
-    // Old permission rows from another administration must not appear
-    // in counter setup or make unrelated locations selectable.
-    if(homeDepartment && p.department!==homeDepartment){
-      return false;
+    const service=p.service_catalog;
+    if(!service?.service_name) return false;
+
+    // Preserve the existing rules within the employee's home department,
+    // including any assigned home-section restriction.
+    if(homeDepartment && p.department===homeDepartment){
+      return !homeSection || (p.section || null)===homeSection;
     }
 
-    // If the assigned administration has a specific home section,
-    // only permissions from that section are available operationally.
-    if(homeSection){
-      return (p.section || null)===homeSection;
-    }
-
-    // No section assigned: preserve the previous behavior within
-    // the employee's assigned administration.
-    return true;
+    // Allow explicitly granted services from ANY other department,
+    // but only when the service is active and matches the permission's
+    // department and section. A mismatched/stale grant is not usable.
+    return service.active===true &&
+      service.department===p.department &&
+      (service.section || null)===(p.section || null);
   });
 
   return uniquePermissionRouteKeys(scopedRows.map(p=>{
